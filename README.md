@@ -1,127 +1,255 @@
-# airLLM + ternary — Gemma 4 31B
+# airLLM + ternary
 
-Layer-by-layer streaming inference (AirLLM-style) with BitNet b1.58 ternary
-weights, for `google/gemma-4-31B`.
+**Bounded-memory inference for 1.58-bit ternary LLMs.** Runs a transformer one
+layer at a time from disk, keeping peak resident weights under a configurable
+byte budget — with output proven bit-identical to conventional loading.
 
-## Why the two belong together
+Target hardware is an 8 GB NVIDIA Jetson Orin Nano. Development and all current
+measurements are on Apple Silicon (M5 Max, MPS).
 
-AirLLM's bottleneck is **bytes moved per layer**. It runs one layer at a time so
-peak memory is bounded by a single layer instead of the whole model, but it pays
-for that by reading every layer from disk on every forward pass.
+---
 
-Ternary quantization attacks exactly that cost:
+## The idea
 
-| | bf16 | ternary (2-bit packed, g=128) |
+Large language models are memory-bound. A 31B-parameter model needs ~62 GB just
+to hold its weights, which rules out edge devices. Two techniques address this,
+and they compound:
+
+**Ternary quantization** stores each weight as `-1`, `0`, or `+1` plus a shared
+scale — roughly 8× smaller than bf16, at ~1.6–2.0 bits per weight.
+
+**Layer streaming** loads one transformer layer off disk, runs it, discards it,
+and loads the next. Peak memory is bounded by a single layer instead of the whole
+network.
+
+They pair well because **streaming is bottlenecked entirely on bytes-read-per-layer**,
+and ternary is exactly what shrinks that:
+
+| | bf16 | ternary |
 |---|---|---|
-| Sliding layer (~479M params) | 958 MB | **~127 MB** |
-| Full-attention layer (~545M) | 1.09 GB | ~145 MB |
-| All 60 decoder layers | ~59 GB | **~7.8 GB** |
-| + tied embeddings (kept bf16) | 2.8 GB | 2.8 GB |
+| BitNet-2B layer | ~139 MB | **~17 MB** |
+| Gemma-4-31B layer (projected) | ~958 MB | **~127 MB** |
 
-**~7.5× less I/O per layer.** That is the whole thesis.
+---
 
-## What Gemma 4 31B actually is
+## Results
 
-Worth knowing, because several of these drove design decisions:
+Measured on `microsoft/bitnet-b1.58-2B-4T` (2.4B params, 30 layers), Apple M5 Max.
 
-- **60 decoder layers** — 50 sliding (window 1024) + 10 full, strict 5:1 pattern
-- **Asymmetric attention** — sliding layers use `head_dim=256` / 16 KV heads;
-  full-attention layers use `head_dim=512` / only **4** KV heads
-- `attention_k_eq_v: true`, QK-norm, and a per-layer `layer_scalar` tensor
-- hidden 5376, MLP 21504, vocab 262144, **tied** embeddings, 256K context
-- A 27-layer / 1152-hidden vision tower (~430M params)
-- 62.5 GB on disk at bf16, ungated on HF
+### Correctness
 
-Those 4 global KV heads matter: they make the KV cache unusually cheap. At 32K
-context the whole cache is only ~3.5 GB, because the 50 sliding layers are
-capped by their 1024 window and only the 10 full layers grow with sequence
-length.
+Because a natively-ternary checkpoint needs no arithmetic on its weights, the
+engine only moves packed bytes. So the bar is **exact token equality**, not a
+perplexity tolerance:
 
-## Design decisions
+```
+PASS: all 4 completions are token-identical to the unstreamed reference
+      max|Δ| = 0 across all 30 decoder layers, embeddings, and logits
+```
 
-**We do not reimplement Gemma 4's forward pass.** The model is instantiated on
-the `meta` device (zero allocation), every `nn.Linear` is swapped for a
-streamable `TernaryLinear`, and forward pre-hooks on each decoder layer fetch
-that layer's shard. transformers keeps ownership of attention, RoPE, masking and
-the KV cache — so the asymmetric head dims, `layer_scalar` and QK-norm stay
-correct without us reproducing them.
+### Memory / throughput trade-off
 
-**The budget is a dial, not a switch.** One code path covers the whole range:
+| budget | tok/s | peak RSS | bytes read | evictions | correct |
+|---|---|---|---|---|---|
+| 0.05 GB | 4.36 | 0.69 GB | 12.53 GB | 718 | ✅ |
+| 0.10 GB | 4.28 | 0.71 GB | 12.53 GB | 715 | ✅ |
+| 0.20 GB | 4.27 | 0.70 GB | 12.53 GB | 709 | ✅ |
+| 1.20 GB | 7.68 | 0.70 GB | 0.52 GB | 0 | ✅ |
+
+Only a **1.8× throughput penalty for 24× more I/O** — because ternary layers are
+small enough that a background prefetch thread hides most of the read latency.
+
+### Quantization-aware distillation
+
+Naive post-training rounding to ternary is destructive. Block-wise distillation
+recovers it. Measured on `SmolLM2-135M`, 6 blocks, 300 steps each:
+
+| block | naive PTQ | distilled | gain | MSE drop |
+|---|---|---|---|---|
+| 0 | 0.7358 | **0.9482** | +0.2124 | 5.1× |
+| 1 | 0.7483 | **0.9697** | +0.2215 | 7.8× |
+| 2 | 0.8097 | 0.8442 | +0.0344 | 1.2× |
+| 3 | 0.9911 | 0.9975 | +0.0065 | 3.7× |
+| 4 | 0.9767 | 0.9960 | +0.0193 | 4.6× |
+| 5 | 0.9638 | 0.9931 | +0.0294 | 4.4× |
+
+**Mean output cosine 0.871 → 0.958.** The early blocks, which PTQ mangles worst,
+recover the most. Block 2 resists training — likely massive-activation
+pathology — and is a candidate for bf16 fallback.
+
+---
+
+## Quick start
+
+```bash
+source activate.sh                        # creates venv with uv, sets paths
+python -m airllm_ternary.build_bitnet     # download + shard (one-time)
+python chat.py                            # chat, 0.75 GB budget
+```
+
+```bash
+python chat.py --budget-gb 0.05           # minimum footprint, heavy streaming
+pytest tests/ -q                          # 20 tests
+```
+
+In-session commands: `/stats` (engine counters), `/reset`, `/raw`, `/quit`.
+
+Verify correctness against the reference yourself:
+
+```bash
+python experiments/verify_streaming.py --shards "$AIRLLM_SHARDS"
+```
+
+---
+
+## How it works
+
+**The model is never built with real weights.** It's instantiated on PyTorch's
+`meta` device (zero allocation), then every `nn.Linear` is swapped for a
+streamable packed-ternary equivalent, and forward pre-hooks on each decoder layer
+fetch that layer's shard before it runs.
+
+This delegates attention, RoPE, masking, and KV-cache management to
+`transformers`. Architecture-specific correctness is inherited rather than
+reimplemented — which matters for models with asymmetric head dimensions or
+per-layer scalars, where a hand-rolled forward pass is very easy to get subtly
+wrong.
+
+**The budget is a dial, not a switch.** One code path spans the range:
 
 | budget | behaviour |
 |---|---|
-| ≥ shard total | every layer resident after first touch; an ordinary quantized model |
+| ≥ shard total | all layers resident after first touch; an ordinary quantized model |
 | a few layers | true streaming, ~1 layer of I/O per layer of compute |
 | 1 layer | minimum footprint, maximum I/O |
 
-A background thread prefetches layer N+1 while layer N computes.
-
 **Only the projections stream.** `q/k/v/o/gate/up/down` are ~99% of each layer's
-parameters. Norms, `layer_scalar` and the embedding table are materialized once
-and pinned — paging a few kilobytes of RMSNorm gains in and out would cost I/O
-and save nothing.
+parameters. Norms, per-layer scalars, and the embedding table are materialized
+once and pinned — paging a few kilobytes of RMSNorm gains in and out would cost
+I/O and save nothing.
 
-**What never gets ternarized**, and why:
+---
 
-- `embed_tokens` — 262144 × 5376 = 1.41B params, and `tie_word_embeddings` means
-  the same matrix is also the output head. Quantizing it damages both the input
-  representation and every logit.
-- norms / `layer_scalar` — kilobytes each, nothing to gain
-- the vision tower — small share of params, and vision encoders are far more
-  sensitive to weight noise than decoder MLPs (`--quantize-vision` to override)
-- first and last decoder layer — most outlier-heavy activations (tunable)
+## Two bugs the correctness harness caught
 
-## Packing modes
+Both produced **fluent, plausible, completely wrong text** while passing every
+smoke test. This is the failure mode that makes quantized inference dangerous to
+ship, and the reason the bar here is token equality rather than "looks fine."
 
-- `2bit` — 4 values/byte via shifts. 2.00 bits/weight, fast dequant. Default.
-- `trit5` — 5 base-3 trits/byte (3⁵ = 243 < 256). **1.60 bits/weight**, the
-  honest "1.58-bit" figure, ~20% smaller but slower to unpack.
+**1. Missing activation quantization.** BitNet is W1.58**A8** — ternary weights
+*and* per-token int8 activations. Implementing only the weight half changes the
+numerics enough to wreck the model, because it was trained expecting quantized
+activations.
 
-## Usage
+**2. Severed weight tying.** With `tie_word_embeddings: True`, `lm_head` shares
+the embedding matrix. Replacing `embed_tokens.weight` with a fresh `nn.Parameter`
+leaves `lm_head` pointing at the original meta tensor — an unmaterialized output
+projection, with no error raised. There's now a guard that fails loudly.
 
-```bash
-source activate.sh     # creates/activates the venv and sets cache paths
+A third, subtler one: instantiating a model from config skips
+`generation_config.json`, which `from_pretrained` would have loaded. Without it
+there are no stop tokens, so the model runs to `max_new_tokens` and cheerfully
+role-plays both sides of the conversation.
 
-python cli.py build  <model_dir> shards/ --verbose
-python cli.py run    <model_dir> shards/ --budget-gb 4 --prompt "..."
-python cli.py bench  <model_dir> shards/          # sweep the budget curve
+---
+
+## Packed format notes
+
+All of these store the same `-1/0/+1`. The bits-per-weight difference is
+**packing efficiency and scale granularity**, not value precision — and scale
+granularity is what drives quality, in the opposite direction from bit count:
+
+| format | bpw | weights per scale | CUDA kernels |
+|---|---|---|---|
+| TQ1_0 (llama.cpp) | 1.69 | 256 | ❌ none |
+| TQ2_0 (llama.cpp) | 2.06 | 256 | ❌ none |
+| **Q2_0** (llama.cpp) | 2.25 | **64** | ✅ MMQ + MMVQ |
+| HF `bitnet` | 2.00 | per-tensor | via `AutoBitLinear` |
+
+**Q2_0 spends ~9% more bytes to get 4× more scales** — higher fidelity *and* the
+only ternary format with merged CUDA support. For a CUDA target like the Jetson,
+TQ2_0 would silently fall back to CPU.
+
+This repo reads the HF `bitnet` layout (4 values per `uint8`, strided along dim
+0, per-tensor scale), verified byte-exact against
+`transformers.integrations.bitnet.unpack_weights`. It also implements its own
+2-bit and base-3 trit packing (1.60 bpw, exploiting 3⁵ = 243 < 256) for
+quantizing non-ternary models.
+
+---
+
+## Repo layout
+
+```
+airllm_ternary/
+  loader.py           LRU residency manager, byte budget, prefetch thread
+  model.py            meta-device assembly, linear swapping, streaming hooks
+  linear.py           TernaryLinear / BitNetLinear / HighPrecisionLinear
+  bitnet_format.py    HF packed-ternary reader + A8 activation quantization
+  ternary.py          BitNet b1.58 absmean quantization, 2-bit & trit packing
+  policy.py           which tensors stay high-precision, and why
+  shard.py            quantize + shard a full-precision checkpoint
+  shard_native.py     losslessly re-shard an already-ternary checkpoint
+  qat.py              straight-through estimator, QATLinear
+  reconstruct.py      block-wise quantization-aware distillation
+  build_bitnet.py     one-command download + shard
+
+experiments/
+  verify_streaming.py  streamed vs reference, exact token equality
+  qat_validate.py      distillation vs naive PTQ, head to head
+  debug_divergence.py  layer-by-layer tensor diffing
+
+tests/                 20 tests
+results/               measured outputs
 ```
 
-`build` reports per-tensor reconstruction cosine similarity and lists the
-worst-reconstructed tensors, which are the candidates for
-`force_high_precision` in the policy.
+`results/qat_v1_*` used a raw MSE objective, which oscillated on deeper blocks
+because activation magnitude grows with depth. `results/qat_v2_*` uses a
+scale-invariant loss and is the reported result.
 
-## Status
+---
 
-Working and tested:
+## Limitations
 
-- ternary quantize / pack / unpack, both modes, round-trip lossless (8 tests)
-- full pipeline: quantize → shard → meta-instantiate → swap → stream → generate
-  (6 tests, on a synthetic checkpoint)
-- **streaming and fully-resident modes produce bit-identical output** — residency
-  changes memory, never numerics
-- eviction respects the budget; prefetch serves real hits
+**Ternary weights are dequantized to bf16 before matmul.** There is no sub-8-bit
+arithmetic kernel here. The win is memory and I/O, not FLOPs — compute is
+identical to bf16 once a weight is materialized. Real ternary compute speedup
+needs custom Metal/CUDA kernels.
 
-Not yet validated:
+**The embedding table is the actual bottleneck.** On BitNet-2B it is 657 MB —
+*larger than all 30 ternary layers combined* (522 MB) — and it's unquantized and
+pinned. So peak memory floors at ~0.70 GB no matter how tight the budget. Layer
+streaming took this model from 1.17 GB to 0.70 GB: a 40% saving, not the 8× the
+per-layer numbers suggest.
 
-- **Quality on the real 31B.** Post-training ternarization without QAT is
-  destructive, and no perplexity number has been measured yet. This is the main
-  open risk.
-- Throughput on the real model.
+**Cache hit rate is 0 at tight budgets, and that's inherent.** A cyclic scan over
+N layers with room for fewer than N misses on every access regardless of eviction
+policy. Prefetch is what recovers throughput, not caching.
 
-## Caveats worth knowing
+**No natively-ternary model above ~4B parameters exists publicly.** The largest is
+`SpectraSuite/TriLM_3.9B`. Everything bigger (Falcon3-10B-1.58bit,
+Llama3-8B-1.58) is a *converted* full-precision model. Layer streaming only
+really pays off above that ceiling — which is the argument for the distillation
+track.
 
-**There is no ternary matmul kernel on MPS.** Weights are dequantized to bf16 and
-run through normal `F.linear`. The win is bytes on disk and bytes resident, *not*
-FLOPs — compute is identical to bf16 once a weight is materialized. Real ternary
-compute speedup would need custom Metal kernels.
+**Not yet validated:** end-to-end perplexity (the 0.958 is *per-block* output
+cosine on a 135M model; errors compound with depth), anything on actual Jetson
+hardware, and distillation at scale.
 
-**AirLLM may be more than this machine needs.** Ternary weights (~10.6 GB) plus
-KV at 32K (~3.5 GB) is ~14 GB against 36 GB of unified memory — the model fits
-resident. Streaming earns its keep when targeting smaller devices or when
-minimizing footprint on principle. Set `--budget-gb` high and you get the fast
-path for free.
+---
 
-**Google ships a QAT 4-bit** (`google/gemma-4-31B-it-qat-w4a16-ct`). It had
-training-time budget we don't, so it's the honest quality ceiling to measure
-ternary against.
+## Roadmap
+
+1. **Quantize/stream the embedding table** — now the binding constraint
+2. **Jetson Orin Nano port** — Q2_0 format, real CUDA target
+3. **H100 distillation** — build a ternary model large enough that streaming pays
+
+---
+
+## References
+
+- BitNet b1.58 — [arXiv:2504.12285](https://arxiv.org/abs/2504.12285) · [microsoft/bitnet-b1.58-2B-4T](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T)
+- AirLLM — layer-by-layer inference
+- [oLLM](https://github.com/Mega4alik/ollm) — layer streaming, fp16/bf16 only
+- [fucina](https://github.com/matteo-grella/fucina) — ternary + bounded streaming, MoE-expert granularity, TQ2_0
+- llama.cpp ternary quant types `TQ1_0` / `TQ2_0` / `Q2_0`
