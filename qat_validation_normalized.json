@@ -1,0 +1,106 @@
+{
+  "results": [
+    {
+      "initial_mse": 0.6102390289306641,
+      "final_mse": 0.11950533837080002,
+      "mse_reduction": 5.106374637735598,
+      "output_cosine": 0.9482394854227701,
+      "seconds": 2.4,
+      "codes": {
+        "frac_neg": 0.3003713348765432,
+        "frac_zero": 0.3985309365354938,
+        "frac_pos": 0.30109772858796297
+      },
+      "block": 0,
+      "naive_cosine": 0.7358494301637014,
+      "cosine_gain": 0.21239005525906873
+    },
+    {
+      "initial_mse": 0.4678492546081543,
+      "final_mse": 0.05960453301668167,
+      "mse_reduction": 7.849222717292595,
+      "output_cosine": 0.9697246849536896,
+      "seconds": 2.3,
+      "codes": {
+        "frac_neg": 0.3409378616898148,
+        "frac_zero": 0.3182267554012346,
+        "frac_pos": 0.3408353829089506
+      },
+      "block": 1,
+      "naive_cosine": 0.7482612033685049,
+      "cosine_gain": 0.2214634815851847
+    },
+    {
+      "initial_mse": 0.3589470684528351,
+      "final_mse": 0.2930806577205658,
+      "mse_reduction": 1.2247381701834068,
+      "output_cosine": 0.8441743354002634,
+      "seconds": 2.3,
+      "codes": {
+        "frac_neg": 0.34040436921296297,
+        "frac_zero": 0.3200020495756173,
+        "frac_pos": 0.33959358121141975
+      },
+      "block": 2,
+      "naive_cosine": 0.8097449541091919,
+      "cosine_gain": 0.03442938129107154
+    },
+    {
+      "initial_mse": 0.020556986331939697,
+      "final_mse": 0.0055227577686309814,
+      "mse_reduction": 3.7222321153939553,
+      "output_cosine": 0.9975423812866211,
+      "seconds": 2.3,
+      "codes": {
+        "frac_neg": 0.339819637345679,
+        "frac_zero": 0.3199568383487654,
+        "frac_pos": 0.3402235243055556
+      },
+      "block": 3,
+      "naive_cosine": 0.9910746117432913,
+      "cosine_gain": 0.006467769543329838
+    },
+    {
+      "initial_mse": 0.04087444394826889,
+      "final_mse": 0.008843979798257351,
+      "mse_reduction": 4.621725160014831,
+      "output_cosine": 0.9959690471490225,
+      "seconds": 2.3,
+      "codes": {
+        "frac_neg": 0.34260464891975306,
+        "frac_zero": 0.3157250675154321,
+        "frac_pos": 0.3416702835648148
+      },
+      "block": 4,
+      "naive_cosine": 0.9766554534435272,
+      "cosine_gain": 0.019313593705495236
+    },
+    {
+      "initial_mse": 0.05644330382347107,
+      "final_mse": 0.012868033722043037,
+      "mse_reduction": 4.386319234366263,
+      "output_cosine": 0.993123730023702,
+      "seconds": 2.3,
+      "codes": {
+        "frac_neg": 0.33963577835648145,
+        "frac_zero": 0.3201708381558642,
+        "frac_pos": 0.3401933834876543
+      },
+      "block": 5,
+      "naive_cosine": 0.963763823111852,
+      "cosine_gain": 0.029359906911849976
+    }
+  ],
+  "mean_naive": 0.8708915793233448,
+  "mean_trained": 0.9581289440393448,
+  "config": {
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "blocks": 6,
+    "steps": 300,
+    "lr": 0.0001,
+    "group_size": 128,
+    "seq_len": 256,
+    "device": "mps",
+    "out": "qat_validation_normalized.json"
+  }
+}

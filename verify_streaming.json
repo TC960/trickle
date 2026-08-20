@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "mismatches": [],
+  "engine": {
+    "hits": 2850,
+    "misses": 30,
+    "evictions": 0,
+    "bytes_read": 521944580,
+    "load_seconds": 0.25622516803559847,
+    "prefetch_hits": 29,
+    "hit_rate": 0.9895833333333334,
+    "resident_mb": 521.9,
+    "budget_mb": 750.0,
+    "gb_read": 0.52
+  },
+  "tok_s": 8.319,
+  "config": {
+    "model": "microsoft/bitnet-b1.58-2B-4T",
+    "budget_gb": 0.75,
+    "device": "mps",
+    "max_new_tokens": 24,
+    "no_prefetch": false
+  },
+  "peak_rss_gb_including_reference": 5.347
+}
