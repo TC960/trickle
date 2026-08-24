@@ -12,7 +12,8 @@ over every claim made in this project, self-critical by design.
 
 | claim | evidence | status |
 |---|---|---|
-| Streaming engine is bit-exact | 4/4 completions token-identical, `max\|Δ\|=0` across all 30 layers to logits | ✅ |
+| Streaming engine is bit-exact | 4/4 completions token-identical, `max\|Δ\|=0` across all 30 layers to logits (BitNet-2B) | ✅ |
+| **Streaming is bit-exact at 31B** | `max\|Δlogit\| = 0.00e+00` streaming Gemma 4 at a 4 GB budget vs fully resident. First time the two halves of this project were connected | ✅ |
 | BitNet is W1.58A8, not weight-only | found by debugging; fixing it changed garbage → coherent | ✅ |
 | int8 nearly free on weights | +0.49% ppl AND 3.8% flip rate, both measured | ✅ |
 | nf4 costs Gemma 5.6× more than Qwen | +5.03% vs +0.90%, same code, same eval | ✅ |
@@ -37,7 +38,6 @@ over every claim made in this project, self-critical by design.
 
 | gap | why it matters |
 |---|---|
-| **The streaming engine has never run on Gemma 4** | The "airLLM" half of the project is validated only on BitNet-2B. The entire integration is unproven at 31B |
 | **No inference speed measured for any Gemma config** | Streaming is a throughput trade. We have zero tok/s numbers for the thing we're building |
 | **GPTQ never validated** | Implementation is correct at `H=I` but has never beaten round-to-nearest on real data |
 | **Learnable-threshold experiment never completed** | OOM'd repeatedly; the PV-Tuning prediction is still untested |
@@ -50,7 +50,7 @@ over every claim made in this project, self-critical by design.
 
 ## D. Bugs found in my own code during this project
 
-Recorded because the rate matters: twelve, and several produced
+Recorded because the rate matters: thirteen, and several produced
 *plausible-looking wrong numbers* rather than crashes.
 
 1. Missing W1.58A8 activation quantization → fluent garbage
@@ -68,6 +68,8 @@ Recorded because the rate matters: twelve, and several produced
     cross-entropy over 2048×262144 upcast to fp32 (2.1 GB in one tensor) → OOM
     on any 80 GB card
 12. **The watchdog reported liveness it could not observe** (see G)
+13. **Scale-precision mismatch in the quantizers** (see H) -- present in the
+    ternary path from the very first commit
 
 **Of these, 1–6 and 12 produced believable but wrong results.** Only 7–11
 crashed loudly. That ratio is the argument for the reference-comparison harness.
@@ -108,6 +110,36 @@ refresh`, `reset`, `stop`, `start`, and `brev exec` all failed while Brev
 reported it RUNNING. That provider exposes only `delete`. Lesson recorded in
 `watchdog.sh`: **provision with `--stoppable`**, or the only way to end a
 billing state is to destroy the disk.
+
+## H. Codes quantized against one scale, reconstructed with another
+
+`quantize_ternary` computed codes from an **fp32** scale and then stored that
+scale as **bf16**. Dequantization used the stored bf16 value. So every weight
+was reconstructed against a scale ~0.4% different from the one its code was
+derived from -- a systematic displacement of a fraction of a quantization step,
+not rounding noise. The same fault appeared in the new `quantize_uniform`.
+
+Fixed in both by rounding the scale to its storage precision **first**, then
+deriving codes and zero points from it, so quantize -> store -> dequantize is
+self-consistent. `qat.py`'s straight-through estimators now round to bf16 too,
+so training optimizes the quantizer that actually ships.
+
+**Consequence for prior results:** every ternary number was measured with the
+mismatch present, making them pessimistic rather than flattering; `distill_seq`
+4-bit numbers trained against fp32 scales, making them slightly optimistic
+relative to anything streamed. Headline conclusions are unaffected -- 4-bit
+viable, ternary dead -- but exact figures want re-measuring.
+
+**Why it survived this long:** the round-trip tests passed throughout. Packing
+and unpacking were always exact; the bug lived in the relationship between the
+quantizer and the storage format, which no round-trip test can see. It surfaced
+only when a test asserted that the weight *training* optimizes equals the weight
+*serving* produces. Two attempted fixes made the error worse (8e-03 -> 4e-01)
+before the real cause became visible.
+
+The general lesson, and the third instance of it this project: a test that
+exercises one component against itself proves far less than a test that pins two
+components to each other.
 
 ## E. What would actually make this defensible
 
