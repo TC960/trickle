@@ -53,6 +53,20 @@ def _iter_source_tensors(model_dir: Path):
                 yield name, handle
 
 
+def _source_tensor_names(model_dir: Path):
+    """Every tensor name in the checkpoint, from metadata only.
+
+    Lets us know up front which tensors each shard is waiting on, so a shard
+    can be written the moment its last one arrives instead of at the very end.
+    """
+    index_path = model_dir / "model.safetensors.index.json"
+    if index_path.exists():
+        return list(json.loads(index_path.read_text())["weight_map"])
+    with safe_open(model_dir / "model.safetensors", framework="pt",
+                   device="cpu") as handle:
+        return list(handle.keys())
+
+
 def build_shards(
     model_dir,
     output_dir,
@@ -69,6 +83,15 @@ def build_shards(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # A shard is complete once every source tensor mapped to it has been
+    # processed. Tracking that lets us write and free each shard as we go:
+    # peak memory becomes one layer (~250 MB) rather than the whole quantized
+    # model (~19 GB), and the output appears incrementally instead of all at
+    # the end.
+    pending = defaultdict(set)
+    for source_name in _source_tensor_names(Path(model_dir)):
+        pending[shard_key(source_name)].add(source_name)
+
     shards = defaultdict(dict)
     manifest = {
         "group_size": policy.group_size,
@@ -82,6 +105,18 @@ def build_shards(
     started = time.time()
     quantized_params = 0
     kept_params = 0
+
+    def flush(key):
+        """Write one shard, record it, and release its tensors."""
+        tensors = shards.pop(key)
+        path = output_dir / f"{key}.safetensors"
+        save_file(tensors, str(path))
+        manifest["shards"][key] = {
+            "file": path.name,
+            "nbytes": path.stat().st_size,
+            "num_tensors": len(tensors),
+        }
+        return path
 
     for name, handle in _iter_source_tensors(model_dir):
         tensor = handle.get_tensor(name)
@@ -136,16 +171,19 @@ def build_shards(
         if verbose:
             print(f"  {name:<70} {policy.describe(name, tensor.shape)}")
 
-    # Write one file per shard. Each is self-contained so the loader can mmap
-    # exactly the layer it needs without touching any other layer's bytes.
-    for key, tensors in sorted(shards.items()):
-        path = output_dir / f"{key}.safetensors"
-        save_file(tensors, str(path))
-        manifest["shards"][key] = {
-            "file": path.name,
-            "nbytes": path.stat().st_size,
-            "num_tensors": len(tensors),
-        }
+        pending[key].discard(name)
+        if not pending[key]:
+            path = flush(key)
+            del pending[key]
+            if verbose:
+                print(f"  -> wrote {path.name} "
+                      f"({manifest['shards'][key]['nbytes']/1e6:.0f} MB)",
+                      flush=True)
+
+    # Safety net: anything whose source tensors were not all seen (a name in a
+    # shard file but absent from the index, say) still gets written.
+    for key in sorted(list(shards)):
+        flush(key)
 
     manifest["summary"] = {
         "quantized_params": quantized_params,
