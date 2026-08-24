@@ -46,6 +46,37 @@ def ternary_ste(weight: torch.Tensor, group_size: int = 128) -> torch.Tensor:
     return weight + (quantized - weight).detach()
 
 
+def uniform_ste(weight: torch.Tensor, bits: int = 2, group_size: int = 128):
+    """Asymmetric uniform quantization with a straight-through estimator.
+
+    This is what EfficientQAT's Block-AP optimizes, and it is strictly more
+    expressive than the ternary rule for the same reason GSQ measures 2-bit
+    beating ternary by ~5 points: 2^bits levels with a learnable zero point can
+    represent an asymmetric weight distribution, where {-1,0,+1} x scale cannot.
+
+    min/max are taken per group so the levels track local dynamic range.
+    """
+    original_shape = weight.shape
+    in_features = original_shape[-1]
+    pad = (-in_features) % group_size
+    if pad:
+        weight = F.pad(weight, (0, pad))
+
+    groups = weight.reshape(-1, group_size)
+    qmax = 2 ** bits - 1
+    lo = groups.min(dim=1, keepdim=True).values
+    hi = groups.max(dim=1, keepdim=True).values
+    scale = ((hi - lo) / qmax).clamp_min(1e-8)
+    zero = torch.round(-lo / scale)
+
+    q = torch.clamp(torch.round(groups / scale) + zero, 0, qmax)
+    dequant = ((q - zero) * scale).reshape(*original_shape[:-1], -1)
+    if pad:
+        dequant = dequant[..., :in_features]
+        weight = weight[..., :in_features]
+    return weight + (dequant - weight).detach()
+
+
 class QATLinear(nn.Module):
     """Linear layer that trains a latent weight through a ternary quantizer.
 
@@ -56,11 +87,13 @@ class QATLinear(nn.Module):
     """
 
     def __init__(self, in_features: int, out_features: int, *, group_size: int = 128,
-                 bias: bool = False):
+                 bias: bool = False, bits: int = 0):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.group_size = group_size
+        # bits=0 means the ternary rule; bits>=2 uses asymmetric uniform.
+        self.bits = bits
 
         # Trained in fp32: ternary rounding is extremely sensitive to small
         # latent updates, and bf16's 8 mantissa bits lose most of them.
@@ -68,11 +101,12 @@ class QATLinear(nn.Module):
         self.bias = nn.Parameter(torch.zeros(out_features)) if bias else None
 
     @classmethod
-    def from_linear(cls, linear: nn.Module, group_size: int = 128) -> "QATLinear":
+    def from_linear(cls, linear: nn.Module, group_size: int = 128,
+                    bits: int = 0) -> "QATLinear":
         """Seed a QAT layer from a trained bf16 linear."""
         module = cls(
             linear.in_features, linear.out_features,
-            group_size=group_size, bias=linear.bias is not None,
+            group_size=group_size, bias=linear.bias is not None, bits=bits,
         )
         with torch.no_grad():
             module.latent_weight.copy_(linear.weight.float())
@@ -81,7 +115,8 @@ class QATLinear(nn.Module):
         return module
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        weight = ternary_ste(self.latent_weight, self.group_size)
+        weight = (uniform_ste(self.latent_weight, self.bits, self.group_size)
+                  if self.bits else ternary_ste(self.latent_weight, self.group_size))
         return F.linear(x, weight.to(x.dtype), self.bias.to(x.dtype) if self.bias is not None else None)
 
     @torch.no_grad()
@@ -123,7 +158,7 @@ def ternary_stats(module: QATLinear) -> dict:
     }
 
 
-def swap_to_qat(block: nn.Module, group_size: int = 128) -> dict:
+def swap_to_qat(block: nn.Module, group_size: int = 128, bits: int = 0) -> dict:
     """Replace every nn.Linear inside a block with a QATLinear.
 
     Returns {module_path: QATLinear} so the caller can export trained weights
@@ -133,7 +168,7 @@ def swap_to_qat(block: nn.Module, group_size: int = 128) -> dict:
     for path, module in list(block.named_modules()):
         if not isinstance(module, nn.Linear):
             continue
-        qat_module = QATLinear.from_linear(module, group_size)
+        qat_module = QATLinear.from_linear(module, group_size, bits)
 
         parent_path, _, attr = path.rpartition(".")
         parent = block

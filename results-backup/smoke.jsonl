@@ -1,0 +1,1 @@
+{"tag": "smoke-qwen38", "model": "Qwen/Qwen3.8-27B", "quant": "none", "load_seconds": 8.7, "footprint_gb": 53.792, "peak_gpu_gb": 57.34, "perplexity": 6.947239398956299, "tokens_scored": 9217, "window": 1024, "stride": 512, "eval_seconds": 11.2}

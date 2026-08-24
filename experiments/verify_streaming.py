@@ -138,14 +138,25 @@ def main():
     print(f"  evictions:      {report['evictions']}")
     print(f"  prefetch hits:  {report['prefetch_hits']}")
 
+    # Record only the reproducibility-relevant settings. Absolute paths are
+    # machine-specific and would leak local directory structure into a file
+    # that is meant to be publishable evidence.
+    safe_config = {
+        key: value for key, value in vars(args).items()
+        if key not in ("shards", "out")
+    }
+
     with open(args.out, "w") as handle:
         json.dump({
             "passed": not mismatches,
             "mismatches": mismatches,
             "engine": report,
             "tok_s": round(total_new / elapsed, 3),
-            "peak_rss_gb": round(peak_rss_gb(), 3),
-            "config": vars(args),
+            # NOTE: this process also loaded the reference model for comparison,
+            # so peak RSS here is NOT the streaming engine's footprint. Measure
+            # that in a dedicated process (see chat.py's /stats).
+            "peak_rss_gb_including_reference": round(peak_rss_gb(), 3),
+            "config": safe_config,
         }, handle, indent=2)
 
     manager.close()

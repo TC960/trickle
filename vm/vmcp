@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Copy to the box. Usage: ./vm/vmcp local/file :/remote/path
+exec scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+  "$1" "${BREV_HOST:-gorgeous-copper-mite}${2}"
