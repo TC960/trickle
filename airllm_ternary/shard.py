@@ -28,6 +28,12 @@ from safetensors.torch import save_file
 
 from .policy import PrecisionPolicy, shard_key
 from .ternary import check_group_size, pack, quantization_error, quantize_ternary
+from .uniform import (
+    bits_per_weight,
+    dequantize_uniform,
+    pack_uniform,
+    quantize_uniform,
+)
 
 
 def _iter_source_tensors(model_dir: Path):
@@ -56,7 +62,8 @@ def build_shards(
     verbose: bool = True,
 ):
     """Quantize and shard a checkpoint. Returns the manifest dict."""
-    check_group_size(policy.group_size, policy.pack_mode)
+    if not policy.bits:
+        check_group_size(policy.group_size, policy.pack_mode)
 
     model_dir = Path(model_dir)
     output_dir = Path(output_dir)
@@ -66,6 +73,7 @@ def build_shards(
     manifest = {
         "group_size": policy.group_size,
         "pack_mode": policy.pack_mode,
+        "bits": policy.bits,
         "num_layers": policy.num_layers,
         "tensors": {},
         "shards": {},
@@ -81,25 +89,43 @@ def build_shards(
         entry = {"shard": key, "shape": list(tensor.shape), "dtype": "bfloat16"}
 
         if policy.is_quantizable(name, tensor.shape):
-            codes, scales = quantize_ternary(tensor, policy.group_size)
-            shards[key][f"{name}.packed"] = pack(codes, policy.pack_mode)
-            shards[key][f"{name}.scales"] = scales
+            if policy.bits:
+                codes, scales, zeros = quantize_uniform(
+                    tensor, policy.bits, policy.group_size)
+                shards[key][f"{name}.packed"] = pack_uniform(codes, policy.bits)
+                shards[key][f"{name}.scales"] = scales
+                shards[key][f"{name}.zeros"] = zeros
+                entry["format"] = "uniform"
+                entry["bits"] = policy.bits
+            else:
+                codes, scales = quantize_ternary(tensor, policy.group_size)
+                shards[key][f"{name}.packed"] = pack(codes, policy.pack_mode)
+                shards[key][f"{name}.scales"] = scales
+                entry["format"] = "ternary"
 
-            entry["format"] = "ternary"
             entry["n_groups"] = scales.shape[0]
             quantized_params += tensor.numel()
 
             if measure_error:
-                from .ternary import dequantize
+                if policy.bits:
+                    reconstructed = dequantize_uniform(
+                        shards[key][f"{name}.packed"], scales, zeros,
+                        bits=policy.bits,
+                        group_size=policy.group_size,
+                        out_features=tensor.shape[0],
+                        in_features=tensor.shape[1],
+                    )
+                else:
+                    from .ternary import dequantize
 
-                reconstructed = dequantize(
-                    shards[key][f"{name}.packed"],
-                    scales,
-                    group_size=policy.group_size,
-                    out_features=tensor.shape[0],
-                    in_features=tensor.shape[1],
-                    mode=policy.pack_mode,
-                )
+                    reconstructed = dequantize(
+                        shards[key][f"{name}.packed"],
+                        scales,
+                        group_size=policy.group_size,
+                        out_features=tensor.shape[0],
+                        in_features=tensor.shape[1],
+                        mode=policy.pack_mode,
+                    )
                 entry["error"] = quantization_error(tensor, reconstructed)
         else:
             shards[key][name] = tensor.to(torch.bfloat16)
@@ -129,6 +155,10 @@ def build_shards(
             s["nbytes"] for k, s in manifest["shards"].items() if k != "globals"
         ),
         "build_seconds": round(time.time() - started, 1),
+        "bits_per_weight": (
+            round(bits_per_weight(policy.group_size, policy.bits), 4)
+            if policy.bits else None
+        ),
     }
 
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))

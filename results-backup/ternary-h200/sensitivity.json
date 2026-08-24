@@ -1,0 +1,369 @@
+{
+ "model": "google/gemma-4-31B",
+ "profile_tokens": 92537,
+ "group_size": 128,
+ "metric": "kl",
+ "positions": 92447,
+ "layers": [
+  {
+   "layer": 4,
+   "flip_rate": 0.04288,
+   "kl": 0.034449,
+   "damage": 0.034449
+  },
+  {
+   "layer": 10,
+   "flip_rate": 0.05118,
+   "kl": 0.043985,
+   "damage": 0.043985
+  },
+  {
+   "layer": 13,
+   "flip_rate": 0.05239,
+   "kl": 0.045648,
+   "damage": 0.045648
+  },
+  {
+   "layer": 14,
+   "flip_rate": 0.05517,
+   "kl": 0.048171,
+   "damage": 0.048171
+  },
+  {
+   "layer": 3,
+   "flip_rate": 0.05495,
+   "kl": 0.04858,
+   "damage": 0.04858
+  },
+  {
+   "layer": 8,
+   "flip_rate": 0.05446,
+   "kl": 0.048702,
+   "damage": 0.048702
+  },
+  {
+   "layer": 0,
+   "flip_rate": 0.05255,
+   "kl": 0.049123,
+   "damage": 0.049123
+  },
+  {
+   "layer": 18,
+   "flip_rate": 0.06158,
+   "kl": 0.05516,
+   "damage": 0.05516
+  },
+  {
+   "layer": 1,
+   "flip_rate": 0.0595,
+   "kl": 0.055583,
+   "damage": 0.055583
+  },
+  {
+   "layer": 15,
+   "flip_rate": 0.06276,
+   "kl": 0.058118,
+   "damage": 0.058118
+  },
+  {
+   "layer": 19,
+   "flip_rate": 0.06476,
+   "kl": 0.058292,
+   "damage": 0.058292
+  },
+  {
+   "layer": 11,
+   "flip_rate": 0.06189,
+   "kl": 0.058508,
+   "damage": 0.058508
+  },
+  {
+   "layer": 9,
+   "flip_rate": 0.05935,
+   "kl": 0.058957,
+   "damage": 0.058957
+  },
+  {
+   "layer": 50,
+   "flip_rate": 0.05004,
+   "kl": 0.061475,
+   "damage": 0.061475
+  },
+  {
+   "layer": 12,
+   "flip_rate": 0.06227,
+   "kl": 0.061764,
+   "damage": 0.061764
+  },
+  {
+   "layer": 16,
+   "flip_rate": 0.06675,
+   "kl": 0.061837,
+   "damage": 0.061837
+  },
+  {
+   "layer": 7,
+   "flip_rate": 0.0658,
+   "kl": 0.062849,
+   "damage": 0.062849
+  },
+  {
+   "layer": 45,
+   "flip_rate": 0.06028,
+   "kl": 0.063952,
+   "damage": 0.063952
+  },
+  {
+   "layer": 5,
+   "flip_rate": 0.06821,
+   "kl": 0.065046,
+   "damage": 0.065046
+  },
+  {
+   "layer": 44,
+   "flip_rate": 0.06374,
+   "kl": 0.067857,
+   "damage": 0.067857
+  },
+  {
+   "layer": 6,
+   "flip_rate": 0.06922,
+   "kl": 0.068644,
+   "damage": 0.068644
+  },
+  {
+   "layer": 46,
+   "flip_rate": 0.06345,
+   "kl": 0.070962,
+   "damage": 0.070962
+  },
+  {
+   "layer": 2,
+   "flip_rate": 0.07303,
+   "kl": 0.073599,
+   "damage": 0.073599
+  },
+  {
+   "layer": 20,
+   "flip_rate": 0.076,
+   "kl": 0.077658,
+   "damage": 0.077658
+  },
+  {
+   "layer": 33,
+   "flip_rate": 0.07775,
+   "kl": 0.077658,
+   "damage": 0.077658
+  },
+  {
+   "layer": 22,
+   "flip_rate": 0.07974,
+   "kl": 0.07843,
+   "damage": 0.07843
+  },
+  {
+   "layer": 17,
+   "flip_rate": 0.07955,
+   "kl": 0.078813,
+   "damage": 0.078813
+  },
+  {
+   "layer": 21,
+   "flip_rate": 0.07886,
+   "kl": 0.079072,
+   "damage": 0.079072
+  },
+  {
+   "layer": 37,
+   "flip_rate": 0.07992,
+   "kl": 0.080158,
+   "damage": 0.080158
+  },
+  {
+   "layer": 25,
+   "flip_rate": 0.08377,
+   "kl": 0.081644,
+   "damage": 0.081644
+  },
+  {
+   "layer": 51,
+   "flip_rate": 0.0565,
+   "kl": 0.082005,
+   "damage": 0.082005
+  },
+  {
+   "layer": 48,
+   "flip_rate": 0.05709,
+   "kl": 0.082673,
+   "damage": 0.082673
+  },
+  {
+   "layer": 43,
+   "flip_rate": 0.07231,
+   "kl": 0.082798,
+   "damage": 0.082798
+  },
+  {
+   "layer": 35,
+   "flip_rate": 0.08495,
+   "kl": 0.083773,
+   "damage": 0.083773
+  },
+  {
+   "layer": 34,
+   "flip_rate": 0.08319,
+   "kl": 0.085901,
+   "damage": 0.085901
+  },
+  {
+   "layer": 26,
+   "flip_rate": 0.08655,
+   "kl": 0.090127,
+   "damage": 0.090127
+  },
+  {
+   "layer": 39,
+   "flip_rate": 0.08389,
+   "kl": 0.090202,
+   "damage": 0.090202
+  },
+  {
+   "layer": 31,
+   "flip_rate": 0.08603,
+   "kl": 0.092402,
+   "damage": 0.092402
+  },
+  {
+   "layer": 47,
+   "flip_rate": 0.07723,
+   "kl": 0.093226,
+   "damage": 0.093226
+  },
+  {
+   "layer": 54,
+   "flip_rate": 0.05906,
+   "kl": 0.096064,
+   "damage": 0.096064
+  },
+  {
+   "layer": 23,
+   "flip_rate": 0.09321,
+   "kl": 0.098693,
+   "damage": 0.098693
+  },
+  {
+   "layer": 24,
+   "flip_rate": 0.096,
+   "kl": 0.101195,
+   "damage": 0.101195
+  },
+  {
+   "layer": 36,
+   "flip_rate": 0.08956,
+   "kl": 0.101312,
+   "damage": 0.101312
+  },
+  {
+   "layer": 27,
+   "flip_rate": 0.09932,
+   "kl": 0.10301,
+   "damage": 0.10301
+  },
+  {
+   "layer": 30,
+   "flip_rate": 0.09385,
+   "kl": 0.104265,
+   "damage": 0.104265
+  },
+  {
+   "layer": 38,
+   "flip_rate": 0.09034,
+   "kl": 0.104489,
+   "damage": 0.104489
+  },
+  {
+   "layer": 42,
+   "flip_rate": 0.08572,
+   "kl": 0.112483,
+   "damage": 0.112483
+  },
+  {
+   "layer": 32,
+   "flip_rate": 0.09521,
+   "kl": 0.113487,
+   "damage": 0.113487
+  },
+  {
+   "layer": 41,
+   "flip_rate": 0.09487,
+   "kl": 0.117375,
+   "damage": 0.117375
+  },
+  {
+   "layer": 55,
+   "flip_rate": 0.0624,
+   "kl": 0.122811,
+   "damage": 0.122811
+  },
+  {
+   "layer": 28,
+   "flip_rate": 0.10724,
+   "kl": 0.12569,
+   "damage": 0.12569
+  },
+  {
+   "layer": 56,
+   "flip_rate": 0.06505,
+   "kl": 0.15622,
+   "damage": 0.15622
+  },
+  {
+   "layer": 57,
+   "flip_rate": 0.08004,
+   "kl": 0.160597,
+   "damage": 0.160597
+  },
+  {
+   "layer": 29,
+   "flip_rate": 0.12503,
+   "kl": 0.166039,
+   "damage": 0.166039
+  },
+  {
+   "layer": 49,
+   "flip_rate": 0.09252,
+   "kl": 0.17932,
+   "damage": 0.17932
+  },
+  {
+   "layer": 40,
+   "flip_rate": 0.16956,
+   "kl": 0.306089,
+   "damage": 0.306089
+  },
+  {
+   "layer": 52,
+   "flip_rate": 0.1508,
+   "kl": 0.472654,
+   "damage": 0.472654
+  },
+  {
+   "layer": 58,
+   "flip_rate": 0.1635,
+   "kl": 0.70435,
+   "damage": 0.70435
+  },
+  {
+   "layer": 53,
+   "flip_rate": 0.18296,
+   "kl": 0.750019,
+   "damage": 0.750019
+  },
+  {
+   "layer": 59,
+   "flip_rate": 0.26673,
+   "kl": 0.974616,
+   "damage": 0.974616
+  }
+ ]
+}

@@ -36,6 +36,11 @@ def ternary_ste(weight: torch.Tensor, group_size: int = 128) -> torch.Tensor:
 
     groups = weight.reshape(-1, group_size)
     scales = groups.abs().mean(dim=1, keepdim=True).clamp_min(1e-8)
+    # Round the scale to bf16, because that is how it is STORED. Shards keep
+    # one bf16 scale per group; training against an fp32 scale optimizes a
+    # quantizer ~0.4% more precise than the one that actually gets served, so
+    # the deployed model would not reproduce the measured model.
+    scales = scales.to(torch.bfloat16).to(groups.dtype)
     quantized = (groups / scales).round().clamp(-1, 1) * scales
     quantized = quantized.reshape(*original_shape[:-1], -1)
 
@@ -67,6 +72,9 @@ def uniform_ste(weight: torch.Tensor, bits: int = 2, group_size: int = 128):
     lo = groups.min(dim=1, keepdim=True).values
     hi = groups.max(dim=1, keepdim=True).values
     scale = ((hi - lo) / qmax).clamp_min(1e-8)
+    # Match the storage format exactly: bf16 scale, integer zero point. See the
+    # note in ternary_ste -- a gate test asserts these agree with uniform.py.
+    scale = scale.to(torch.bfloat16).to(groups.dtype)
     zero = torch.round(-lo / scale)
 
     q = torch.clamp(torch.round(groups / scale) + zero, 0, qmax)

@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .ternary import dequantize
+from .uniform import dequantize_uniform
 
 
 class TernaryLinear(nn.Module):
@@ -103,6 +104,97 @@ class TernaryLinear(nn.Module):
             f"in={self.in_features}, out={self.out_features}, "
             f"g={self.group_size}, mode={self.pack_mode}, {state}"
         )
+
+
+class UniformLinear(nn.Module):
+    """Linear whose weight lives as packed n-bit codes, per-group scales AND
+    per-group zero points.
+
+    Separate from TernaryLinear rather than a flag on it, because the zero point
+    is a third tensor that has to be streamed, evicted and byte-counted
+    alongside the other two. Folding that into TernaryLinear would put a
+    perpetually-None buffer on the ternary path.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        *,
+        bits: int = 4,
+        group_size: int = 128,
+        bias: bool = False,
+        dtype: torch.dtype = torch.bfloat16,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.bits = bits
+        self.group_size = group_size
+        self.compute_dtype = dtype
+
+        self.register_buffer("packed", None, persistent=False)
+        self.register_buffer("scales", None, persistent=False)
+        self.register_buffer("zeros", None, persistent=False)
+        self.register_buffer("bias", None, persistent=False)
+
+        self._weight_cache = None
+        self._has_bias = bias
+
+    @property
+    def is_loaded(self) -> bool:
+        return self.packed is not None
+
+    def load(self, packed, scales, zeros, bias=None, *, cache_dequant: bool = False):
+        self.packed = packed
+        self.scales = scales
+        self.zeros = zeros
+        self.bias = bias
+        self._weight_cache = self.dequantized() if cache_dequant else None
+
+    def evict(self):
+        self.packed = None
+        self.scales = None
+        self.zeros = None
+        self.bias = None
+        self._weight_cache = None
+
+    def dequantized(self) -> torch.Tensor:
+        return dequantize_uniform(
+            self.packed,
+            self.scales,
+            self.zeros,
+            bits=self.bits,
+            group_size=self.group_size,
+            out_features=self.out_features,
+            in_features=self.in_features,
+            dtype=self.compute_dtype,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self._weight_cache is not None:
+            weight = self._weight_cache
+        elif self.packed is not None:
+            weight = self.dequantized()
+        else:
+            raise RuntimeError(
+                f"UniformLinear[{self.in_features}->{self.out_features}] used "
+                "while evicted; the residency manager should have loaded it"
+            )
+        return F.linear(x, weight.to(x.dtype), self.bias)
+
+    def nbytes(self) -> int:
+        total = 0
+        for t in (self.packed, self.scales, self.zeros, self.bias,
+                  self._weight_cache):
+            if t is not None:
+                total += t.numel() * t.element_size()
+        return total
+
+    def extra_repr(self) -> str:
+        state = "loaded" if self.is_loaded else "evicted"
+        return (f"in={self.in_features}, out={self.out_features}, "
+                f"w{self.bits} g={self.group_size}, {state}")
 
 
 class BitNetLinear(nn.Module):

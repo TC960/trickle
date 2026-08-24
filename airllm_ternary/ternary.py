@@ -56,6 +56,10 @@ def quantize_ternary(weight: torch.Tensor, group_size: int = 128):
     groups = weight.float().reshape(-1, group_size)
     # clamp_min guards against an all-zero group producing a divide-by-zero.
     scales = groups.abs().mean(dim=1, keepdim=True).clamp_min(1e-8)
+    # Round to storage precision first -- see the note in uniform.py. Codes
+    # derived from an fp32 scale but dequantized with a bf16 one do not
+    # reconstruct the weight the quantizer intended.
+    scales = scales.to(torch.bfloat16).to(torch.float32)
     codes = (groups / scales).round_().clamp_(-1, 1).to(torch.int8)
     return codes, scales.to(torch.bfloat16)
 

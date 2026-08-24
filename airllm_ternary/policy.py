@@ -65,6 +65,11 @@ class PrecisionPolicy:
     group_size: int = 128
     pack_mode: str = "2bit"
 
+    # 0 = ternary (the pack_mode above applies). >= 2 = asymmetric uniform at
+    # that bit width, which needs a zero point per group and so uses its own
+    # storage format -- see uniform.py.
+    bits: int = 0
+
     # Decoder layers at the very start / end kept in bf16.
     skip_first_layers: int = 1
     skip_last_layers: int = 1
@@ -101,6 +106,8 @@ class PrecisionPolicy:
     def describe(self, name: str, shape) -> str:
         """Human-readable reason for the decision, for `--explain` output."""
         if self.is_quantizable(name, shape):
+            if self.bits:
+                return f"uniform w{self.bits} g{self.group_size}"
             return f"ternary g{self.group_size}/{self.pack_mode}"
         if len(shape) != 2:
             return "bf16 (not a matrix)"

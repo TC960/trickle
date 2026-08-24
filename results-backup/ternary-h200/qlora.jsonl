@@ -1,1 +1,2 @@
 {"tag": "gemma-nf4-kdlora-r32", "model": "google/gemma-4-31B", "arm": "treatment", "pair_id": "qlora-recovery", "rank": 32, "alpha": 64, "steps": 500, "lr": 0.0001, "ce_weight": 0.0, "adapter_mb": 489.7, "flip_rate": 0.03951, "kl_mean": 0.069317}
+{"tag": "gemma-nf4-kdlora-r32-clean", "model": "google/gemma-4-31B", "arm": "treatment", "pair_id": "qlora-recovery", "rank": 32, "alpha": 64, "steps": 500, "lr": 0.0001, "ce_weight": 0.0, "adapter_mb": 489.7, "train_split": "train", "eval_split": "test", "contaminated": false, "flip_rate": 0.07543, "kl_mean": 0.09889}

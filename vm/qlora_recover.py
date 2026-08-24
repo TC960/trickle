@@ -22,6 +22,7 @@ Storing full-vocab teacher logits for Gemma's 262144-token vocabulary costs
 
 import argparse
 import json
+import pathlib
 import math
 import time
 
@@ -239,6 +240,15 @@ def main():
 
     print("\n  saving adapters ->", args.save_dir, flush=True)
     model.save_pretrained(args.save_dir)
+    # peft writes ONLY adapter_config.json + adapter_model.safetensors. Without
+    # the tokenizer alongside them, anything that loads this directory by path
+    # -- benchmarks.py, deep_eval.py -- dies with "couldn't instantiate the
+    # backend tokenizer". That cost us the GSM8K measurement three runs running.
+    tok.save_pretrained(args.save_dir)
+    saved = sorted(p.name for p in pathlib.Path(args.save_dir).iterdir())
+    print(f"  wrote {len(saved)} files: {', '.join(saved)}", flush=True)
+    if not any(f.startswith("tokenizer") for f in saved):
+        raise RuntimeError("no tokenizer written; downstream eval will fail")
 
     # The point of the exercise: did the flip rate actually come down?
     print("\n=== behavioural eval after recovery ===", flush=True)

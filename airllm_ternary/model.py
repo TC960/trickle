@@ -25,7 +25,8 @@ import transformers
 from accelerate import init_empty_weights
 from transformers import AutoConfig
 
-from .linear import BitNetLinear, HighPrecisionLinear, TernaryLinear
+from .linear import (BitNetLinear, HighPrecisionLinear, TernaryLinear,
+                     UniformLinear)
 from .loader import ResidencyManager, ShardStore
 from .policy import shard_key
 from .shard import load_manifest
@@ -50,6 +51,7 @@ def _swap_linears(model: nn.Module, manifest: dict):
     # Absent for natively-ternary manifests, which carry no quantizer settings.
     group_size = manifest.get("group_size", 128)
     pack_mode = manifest.get("pack_mode", "2bit")
+    bits = manifest.get("bits", 0)
     bindings = {}
 
     for path, module in list(model.named_modules()):
@@ -68,6 +70,14 @@ def _swap_linears(model: nn.Module, manifest: dict):
                 module.out_features,
                 group_size=group_size,
                 pack_mode=pack_mode,
+                bias=has_bias,
+            )
+        elif entry["format"] == "uniform":
+            replacement = UniformLinear(
+                module.in_features,
+                module.out_features,
+                bits=entry.get("bits", bits),
+                group_size=group_size,
                 bias=has_bias,
             )
         elif entry["format"] == "bitnet":
@@ -95,7 +105,8 @@ def _materialize_dense(model: nn.Module, store: ShardStore, manifest: dict, devi
     """
     linear_weights = set()
     for path, module in model.named_modules():
-        if isinstance(module, (TernaryLinear, BitNetLinear, HighPrecisionLinear)):
+        if isinstance(module, (TernaryLinear, UniformLinear, BitNetLinear,
+                               HighPrecisionLinear)):
             linear_weights.add(f"{path}.weight")
             linear_weights.add(f"{path}.bias")
 
@@ -146,6 +157,14 @@ def _make_binder(modules, manifest, device, dtype, cache_dequant):
                 module.load(
                     tensors[f"{weight_name}.packed"].to(device),
                     tensors[f"{weight_name}.scales"].to(device=device, dtype=dtype),
+                    bias,
+                    cache_dequant=cache_dequant,
+                )
+            elif entry["format"] == "uniform":
+                module.load(
+                    tensors[f"{weight_name}.packed"].to(device),
+                    tensors[f"{weight_name}.scales"].to(device=device, dtype=dtype),
+                    tensors[f"{weight_name}.zeros"].to(device),
                     bias,
                     cache_dequant=cache_dequant,
                 )
