@@ -100,6 +100,7 @@ Original target: `google/gemma-4-31B`, 61.6 GB in bf16.
 | int8 (bnb) | 3.84% | 0.0302 | — | — | 5.2132 |
 | **w4g128 (ours)** | **8.25%** | **0.0896** | **80.0** | 82.27 | 5.3407 |
 | nf4 (bnb) | 9.18% | 0.1213 | — | — | 5.4484 |
+| nf4 (control) | 9.18% | 0.1213 | **84.0** | 82.65 | 5.4484 |
 | nf4 + KD-LoRA r=32 | 7.54% | 0.0989 | **83.5** | 82.97 | — |
 | w3g128 | — | — | — | — | 6.0835 |
 | w2g128 | — | — | — | — | 27.43 |
@@ -175,11 +176,41 @@ conversation. Streaming is viable for throughput, not for latency.
   token inflation. That table is **pinned**, so this converts directly into ~4
   more resident layers. Never evaluated for quality — wikitext reads 7.7% of
   rows, so it cannot judge this.
-- **KD-LoRA recovery.** Trained against bf16 teacher logits (KL, not hard
-  labels). 490 MB adapter at r=32. nf4 9.18% → 7.54% flips, GSM8K 83.5 vs bf16
-  86.0. **Missing control: nf4's own GSM8K was never measured**, so the gain is
-  bounded but not clean. An earlier run showed 3.95% flips but trained and
-  evaluated on the same wikitext split — contamination inflated it ~3×.
+- **KD-LoRA recovery — the control killed it.** Trained against bf16 teacher
+  logits (KL, not hard labels). 490 MB adapter at r=32. It cut the flip rate
+  9.18% → 7.54%, a real 18% improvement. **It bought nothing downstream:
+  GSM8K went 84.0 → 83.5, slightly WORSE than the unadapted nf4 control.**
+
+  This was reported mid-session as a success ("83.5 vs 80.0") by comparing
+  against `w4g128` — a different quantizer with no adapter — because the real
+  control had not yet run. Against the actual control the gain vanishes. On
+  this evidence KD-LoRA is not worth shipping at r=32.
+
+  Also note an earlier run showed 3.95% flips, but trained and evaluated on the
+  same wikitext split; the contamination inflated the apparent gain ~3×.
+
+## Statistical power — read before believing any downstream number
+
+All downstream numbers above use `--limit 200`. On GSM8K at p≈0.84 that is a
+standard error of **±2.6 points**. Consequences:
+
+| comparison | gap | verdict |
+|---|---|---|
+| nf4 84.0 vs nf4+LoRA 83.5 | 0.5 | noise |
+| nf4 84.0 vs w4g128 80.0 | 4.0 | ~1σ, noise |
+| bf16 86.0 vs w4g128 80.0 | 6.0 | ~1.5σ, borderline |
+
+**Most arms cannot be distinguished at n=200.** By this project's own rule —
+differences under ~5% relative are not results — only bf16 → w4g128 (7%
+relative) clears the bar, and barely.
+
+There is also something unexplained: **nf4 has a worse flip rate than our
+w4g128 (9.18% vs 8.25%) yet scores higher on GSM8K (84.0 vs 80.0)**. Either
+that is noise, or flip rate and task performance are less tightly coupled than
+this project has assumed. Both possibilities need larger n.
+
+**Re-run the headline comparisons at `--limit 1000` before drawing conclusions
+from them.** It halves the error bars and costs about an hour.
 
 ## Qwen3.8-27B (secondary model)
 
@@ -329,9 +360,22 @@ binds — perplexity before flip rate, bit-width before throughput.
   Gemma), which is why KD-LoRA ran on nf4 rather than our better w4g128.
 - `./vm/vmsh 'cmd'` and `./vm/vmcp local :remote` wrap ssh/scp.
   `BREV_HOST=<name>` selects the box.
-- **`watchdog.sh`** — three states (busy/idle/unreachable, never conflated),
-  load by GPU memory not PIDs, backup every poll, stops the box when idle.
-  Run with `STOP_WHEN_DONE=1`. Leaving it at 0 once cost ~10h of idle billing.
+- **Idle shutdown now runs ON THE BOX**, as a systemd timer, and this is the
+  right place for it. Every laptop-side version died when the laptop slept, a
+  session ended, or re-arming was forgotten — which cost ~10h of idle A100+H200
+  billing once and several more hours later. `/etc/systemd/system/idle-guard.{service,timer}`,
+  script at `/ephemeral/work/idle_guard.sh`, fires every 5 min, shuts down after
+  3 consecutive idle checks (~15 min).
+
+  Idle requires BOTH signals: GPU memory < 2 GB **and** no python process
+  running our scripts. Either alone gives false positives — GPU memory reads
+  near-zero while a job loads a 59 GB checkpoint from disk.
+
+  Escape hatch: `touch /ephemeral/work/KEEPALIVE`. Log:
+  `/ephemeral/work/logs/idle_guard.log`. **Reinstall this on any new box before
+  starting long work.**
+- `watchdog.sh` (laptop-side) still exists for live monitoring and continuous
+  backup, but is no longer the thing preventing runaway spend.
 - **Sync all code before running.** Two runs failed on stale checkouts
   (`--bits` missing, `uniform_ste` missing). md5-verify after copying.
 - `git` and `gh` work; two accounts (`TC960` active). Repos:
@@ -356,3 +400,48 @@ binds — perplexity before flip rate, bit-width before throughput.
 | `tests/test_uniform.py` | **the gate**: trained weight == served weight |
 | `AUDIT.md` | evidence quality of every claim; all 13 bugs |
 | `reports/` | post-PTQ recovery survey (one conclusion withdrawn) |
+
+---
+
+# PART 8 — NOTES TO WHOEVER PICKS THIS UP
+
+Written at the end of the session that produced most of Parts 3–5. These are
+patterns, not facts, and they cost real time to learn.
+
+**Check which constraint binds before optimizing anything.** This project spent
+two days on bit-widths before measuring throughput, and throughput turned out to
+decide everything. The same mistake in miniature: perplexity was optimized
+before flip rate, and flip rate before downstream tasks. Every time, the metric
+being improved was not the one that mattered. When you find yourself refining a
+number, ask what would have to be true for that number to be the bottleneck.
+
+**A test that exercises one component against itself proves almost nothing.**
+Bug 13 sat in the ternary path from the first commit and survived every
+round-trip test, because pack/unpack really was exact — the fault lived in the
+relationship between the quantizer and the storage format. It surfaced only when
+a test asserted *the weight training optimizes equals the weight serving
+produces*. Same shape as the cosine-similarity failure and the watchdog failure.
+Prefer tests that pin two independent components to each other.
+
+**Controls are not bureaucracy.** The KD-LoRA result was reported as a success
+and was wrong — the comparison was against a different quantizer because the
+real control hadn't run. When it did, the gain vanished. Nothing about the
+enthusiasm was dishonest; the baseline was simply absent, and absent baselines
+default to whatever flatters.
+
+**The user's tentative hypotheses have beaten my confident assertions
+repeatedly.** lm_head streamability, KV streamability, Qwen 3.8's existence,
+Muse Glimmer's existence, MoE suiting streaming, and the observation that the
+PCIe hop invalidated my throughput projection — all his, several offered with
+"I might be talking out of my ass". Verify rather than evaluate from intuition.
+
+**Instrument the instruments.** Three separate times, monitoring reported things
+it could not observe: cosine similarity that could not see magnitude error, a
+watchdog that could not distinguish a dead box from a busy one, a queue that
+reported `exit 0` because a command substitution clobbered `$?`. Plausible
+output from a broken instrument is worse than no output.
+
+**What is actually left.** Streaming a dense 31B model is memory-feasible
+(3.16 GB resident, bit-exact) and speed-infeasible (15.333 GB/token). The MoE
+pivot addresses the binding constraint directly and nothing else does. Do that
+before any further compression work.
