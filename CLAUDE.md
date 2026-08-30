@@ -568,19 +568,46 @@ keep set was judged on the text it came from.
 | mbpp/test | 97.43% |
 | mmlu_tech/test | 95.49% |
 
-**Second framing — token inflation, which is the correct one.** Treating a
+**Second framing — bits per byte, which is the correct one.** Treating a
 dropped token as unrepresentable is the wrong model of a real trim.
 `vm/vocab_trim.py` (written for Gemma earlier in this project) already pins all
 256 byte-fallback tokens precisely so that every string stays encodable; Qwen
 likewise has exactly 256 byte-level base tokens (confirmed, not assumed). With
-those pinned, nothing becomes unrepresentable — rarer strings just cost more
-tokens:
+those pinned, nothing becomes unrepresentable — rarer strings are just re-spelled
+from surviving tokens.
 
-| kept | %vocab | gsm8k | humaneval | mbpp | mmlu_tech | wikitext |
-|---|---|---|---|---|---|---|
-| 45,563 | 18.3% | +0.63% | **+20.83%** | +11.61% | **+20.98%** | +2.94% |
-| 38,003 | 15.3% | +1.17% | +24.64% | +15.10% | +28.36% | +5.46% |
-| 27,512 | 11.0% | +2.79% | **+33.56%** | +25.89% | **+44.62%** | +12.63% |
+How they are re-spelled matters enormously, and getting this wrong cost a
+factor of ~2.5. Decomposing a dropped token straight to single bytes is far too
+pessimistic: a real trim keeps a *filtered merge table*, so a dropped `elif`
+re-segments as `el`+`if` if both survive, not `e`+`l`+`i`+`f`. Greedy
+longest-match over the kept vocabulary approximates that properly (mean pieces
+per dropped token: 7.68 → 5.03). **All numbers below use greedy
+re-segmentation.** The byte-decomposition figures reported earlier in this
+session were an upper bound and should not be quoted.
+
+Since tokenization changes, the unit is bits per byte, not perplexity
+(Part 1, rule 4). Both arms encode the *same* UTF-8 bytes and are scored under
+the same model, so the comparison is exact.
+
+**Trim to 45,563 tokens (18.3% of vocabulary):**
+
+| held-out corpus | BPB control | BPB trimmed | Δ BPB | Δ tokens |
+|---|---|---|---|---|
+| **wikitext** | 0.6881 | 0.6866 | **−0.21%** | +1.08% |
+| gsm8k | 0.2824 | 0.2943 | +4.22% | +0.28% |
+| mbpp | 0.3795 | 0.4966 | +30.85% | +3.75% |
+| mmlu_tech | 0.3440 | 0.4710 | +36.93% | +3.30% |
+| **humaneval** | 0.1441 | 0.3339 | **+131.76%** | +7.14% |
+
+**Trim to 27,512 tokens (11.0% of vocabulary):**
+
+| held-out corpus | BPB control | BPB trimmed | Δ BPB | Δ tokens |
+|---|---|---|---|---|
+| wikitext | 0.6881 | 0.7393 | +7.45% | +2.62% |
+| gsm8k | 0.2824 | 0.3237 | +14.63% | +0.82% |
+| mbpp | 0.3795 | 0.6549 | +72.58% | +8.59% |
+| mmlu_tech | 0.3440 | 0.6308 | +83.38% | +8.01% |
+| **humaneval** | 0.1441 | 0.5241 | **+263.81%** | +12.79% |
 
 Memory saved, untied embeddings (embed_tokens + lm_head), 1.016B params:
 
@@ -589,27 +616,43 @@ Memory saved, untied embeddings (embed_tokens + lm_head), 1.016B params:
 | 45,563 | 0.187B (5.44×) | 1.89 → 0.35 GiB | 0.473 → 0.087 GiB |
 | 27,512 | 0.113B (9.02×) | 1.89 → 0.21 GiB | 0.473 → 0.052 GiB |
 
-**Why this is a bad trade at 4-bit.** The saving is 0.386 GiB — roughly 8% of
-the ~4.2–4.7 GB Jetson weight budget. The cost is ~21% more tokens on coding
-and technical Q&A, two of the three target use cases. Since this project's
-binding constraint is *GB read per generated token* (Part 6), 21% more tokens
-is 21% more I/O for the same answer. The trim spends the bottleneck resource to
-save the non-bottleneck one. It looks better if embeddings are kept at bf16
-(1.54 GiB saved), which is a defensible configuration — but that is a different
-deployment than the one this project is targeting.
+**Three things this establishes.**
 
-**And once again wikitext would have gotten it exactly backwards.** It reports
-+2.94% inflation for a 5.44× smaller table — an obvious yes. The real target
-domains cost **7× more than that**. This is the third independent time in this
-project that wikitext has structurally failed to see the thing being measured
-(embedding rows, vocabulary coverage, now inflation).
+1. **Wikitext cannot see this at all — it reports the trim as FREE.** At 18.3%
+   of the vocabulary, wikitext BPB *improves* by 0.21% while HumanEval BPB rises
+   132%. Not "wikitext understates it": wikitext points the wrong way. This is
+   the third independent time wikitext has structurally failed to measure the
+   thing at issue (embedding rows, vocabulary coverage, now trim cost), and it
+   is the sharpest instance — a metric that says "slightly better" about a
+   change that more than doubles the bits needed to encode code.
+2. **Counting tokens badly understates the damage.** HumanEval needs 7.14% more
+   tokens but 131.76% more bits — roughly 18× the naive estimate. The
+   re-segmented sequences are out of distribution: BPE always merges during
+   training, so the model has essentially never seen text spelled the way a
+   trimmed vocabulary must spell it. Any future analysis that budgets vocabulary
+   trimming by token count alone will be wrong by an order of magnitude.
+3. **The absolute numbers are much less alarming than the percentages**, and
+   this cuts against over-reading the result. Trimmed HumanEval sits at 0.334
+   bits/byte — still *below* the untrimmed wikitext baseline of 0.688. The
+   ratios are extreme mainly because the code baseline is extraordinarily low
+   (0.144), partly because contiguous HumanEval problems are structurally
+   repetitive and the chunking gives the model strong in-context regularity.
 
-**Caveat, stated plainly:** the inflation numbers are an **upper bound**. They
-decompose a dropped token all the way to its bytes, whereas a real BPE
-re-encode would recover intermediate merges that are still in the kept set. The
-true cost lies somewhere below these figures. The *ranking* across domains is
-robust — it is driven by which tokens go missing, not by the decomposition
-depth — but do not quote the magnitudes as exact.
+**What is NOT established:** whether any of this costs real capability. BPB is a
+teacher-forced proxy, and this project's own history is explicit that proxy
+gains and downstream gains come apart — KD-LoRA moved its proxy 18% and GSM8K
+zero. Deciding whether to trim needs a generative HumanEval/MBPP run against an
+actually-trimmed tokenizer and lm_head, which requires the merge-closure
+machinery `vm/vocab_trim.py` implements for Gemma, ported to Qwen. Not done.
+Until then the defensible summary is: **the trim is measurably not free on the
+target domains, the damage concentrates in code, and the resident-memory saving
+at 4-bit (0.386 GiB, ~8% of the Jetson weight budget) is small enough that the
+burden of proof sits with the trim.**
+
+Method caveat: greedy longest-match is applied per dropped token, so it cannot
+merge across original token boundaries the way a full re-tokenization would.
+That makes it slightly pessimistic — the true cost sits between these figures
+and zero, closer to these.
 
 ---
 
