@@ -1004,6 +1004,21 @@ that doesn't pan out.
   Escape hatch: `touch /ephemeral/work/KEEPALIVE`. Log:
   `/ephemeral/work/logs/idle_guard.log`. **Reinstall this on any new box before
   starting long work.**
+
+  **Important limit, observed directly: the in-VM guard does NOT durably stop
+  billing on Brev-managed instances.** When the guard ran `shutdown -h now` on
+  `gemma-iquant`, the instance went `UNHEALTHY` and Brev then brought it back to
+  `RUNNING` on its own. The same thing happened to two boxes that had been
+  confirmed `STOPPED` minutes earlier — both were found `RUNNING` again later in
+  the session. Treat the in-VM guard as a safety net against *runaway compute*,
+  not as a way to stop the meter. **The only reliable way to stop billing is
+  `brev stop` (or `brev delete`) from the CLI, and it needs verifying afterwards
+  rather than assuming it took.**
+
+  Second gotcha in the same family: a script whose `trap ... EXIT` removes
+  KEEPALIVE will arm the guard the moment it exits — including when it exits
+  *early because it failed*. That is what shut `gemma-iquant` down five minutes
+  after its eval sweep failed fast, before the failure could be diagnosed.
 - `watchdog.sh` (laptop-side) still exists for live monitoring and continuous
   backup, but is no longer the thing preventing runaway spend.
 - **Sync all code before running.** Two runs failed on stale checkouts
