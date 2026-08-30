@@ -124,3 +124,9 @@ desktop.ini
 results-backup/**/logs/
 results-backup/**/*.log
 *.log
+
+# ---------------------------------------------------------------------------
+# Agent scratch. `.claude/worktrees/` holds full repo checkouts created for
+# background agents; committing them would nest the repo inside itself.
+# ---------------------------------------------------------------------------
+.claude/

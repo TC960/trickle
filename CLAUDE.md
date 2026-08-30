@@ -415,9 +415,10 @@ for further improvement. Status per technique:
   sparser than Gemma's 20.6% (Part 3, Qwen entry). Qwen's embeddings are
   untied (Part 4), so a vocab trim benefits both the input embedding *and*
   the separate lm_head — likely a bigger absolute resident-memory win than
-  Gemma's tied-embedding case, at a comparable or better ratio. Not yet
-  trimmed-and-evaluated; same caveat as Gemma applies — don't judge trimmed
-  vocab quality on wikitext alone (Part 1).
+  Gemma's tied-embedding case, at a comparable or better ratio.
+
+  **Now evaluated, and the answer is: probably don't, at least not at 4-bit.**
+  See "Vocabulary trimming, evaluated" below.
 - **Expert deletion: measured, decided not to build.** Instrumented
   `llama.cpp` directly (patched `examples/eval-callback` to filter+dump the
   `ffn_moe_topk` tensor — the actual per-token top-8 expert-selection
@@ -442,40 +443,173 @@ for further improvement. Status per technique:
     from a GGUF/safetensors checkpoint and repack it, the engineering cost
     doesn't currently clear the bar set by this measurement. Recorded as a
     considered no, not a skipped question.
-- **QLoRA / QAT: scoped, not attempted.** The model's `transformers` class
-  (`Qwen3_5MoeForConditionalGeneration`) loads *natively* in the installed
-  library (v5.16.1, no `trust_remote_code` needed — confirmed by direct
-  import). But the working venv has no `torch`/`bitsandbytes`/`peft`/
-  `accelerate` installed (only ever needed `transformers` for tokenizer
-  utilities so far), and a real run needs a training data/loss pipeline and
-  genuine wall-clock training time on top of that — a distinct, larger
-  undertaking than anything else done this session, which has been
-  inference-only throughout. Feasible; not started.
-- **Custom-engine streaming + true ternary, scoped together (same blocker).**
-  Pulled the actual reference implementation: this model's `transformers`
-  class is native (not a custom per-repo file), confirmed via
-  `config.json`'s `architectures: ["Qwen3_5MoeForConditionalGeneration"]`
-  (internal codename "Qwen3.5"; also revealed a detail not previously
-  recorded — `mtp_num_hidden_layers: 1`, i.e. this model also has a
-  multi-token-prediction head). The Gated DeltaNet mechanism itself is only
-  ~350 lines total. The **decode-time (recurrent) form is genuinely simple**
-  — ~50 lines, a per-token loop maintaining one small fixed-size state
-  tensor per layer (`[heads, k_dim, v_dim]`, does not grow with sequence
-  length), structurally just like a KV-cache: update, persist across the
-  streaming loop's evict/reload cycle, repeat. The **prefill (chunked/
-  parallel) form is more involved** (~80 lines, cumulative-decay masking) but
-  a v1 could reuse the simple recurrent loop for prefill too, at some
-  prompt-processing speed cost, deferring the optimized path. The recurrent
-  state must be kept in float32 regardless of the rest of the model's
-  precision (confirmed from the reference code, matches `mamba_ssm_dtype:
-  float32` in config). HF's own code has a fallback-to-optimized-kernel hook
-  pointing at `fla` (Flash Linear Attention) — a maintained fast
-  implementation already exists to adapt from later, not something to build
-  from scratch. **Revised estimate: a bounded few-day task with a concrete
-  reference to port from, not the open-ended multi-week unknown it looked
-  like before this was actually checked.** Still not attempted — this
-  remains the honest gap between "streaming was tested" (true, via
-  llama.cpp) and "our own engine supports this model" (not yet true).
+- **QLoRA / QAT: attempted. Two hard constraints found, both measured.** The
+  model's `transformers` class loads natively (v5.16.1, no
+  `trust_remote_code`). Beyond that, a feasibility probe on an L40S settled
+  two things that would each have wasted hours if assumed rather than checked:
+
+  1. **The FP8 checkpoint cannot be trained at all.** Forward works (loss
+     1.4437 on a smoke batch); backward raises
+     `RuntimeError: Trying to backward through
+     _finegrained_fp8_cuda_...w8a8_block_dynamic_fp8_matmul_grouped.default
+     but no autograd formula was registered`. FP8 here is an inference-only
+     format. Training needs the bf16 checkpoint (~70GB), which does not fit
+     on a 48GB card — hence the 2×A100-80G box.
+  2. **LoRA can only reach 0.047% of this model's parameters.** peft reports
+     `16,250,880 trainable || 34,678,913,408 all`. The reachable modules are
+     attention only — `q/k/v/o_proj` on the 10 full-attention layers and
+     `in_proj_qkv`/`in_proj_z`/`in_proj_b`/`in_proj_a`/`out_proj` on the 30
+     GatedDeltaNet layers. The routed experts, which are ~32.2B of the 34.7B
+     parameters, are fused 3D tensors inside `FP8Experts`/the MoE block, not
+     `nn.Linear`, so peft cannot target them (bug 19's layout again). Any
+     result from LoRA on this architecture is a statement about
+     **attention-only** adaptation, and should be reported that way.
+
+  Also note there is no bnb-4bit variant of this model published — the
+  available quantized repos are GGUF, NVFP4, MLX-4bit and OpenVINO-int4, all
+  inference-only — so the usual cheap QLoRA path (4-bit base + adapters on one
+  small card) is not available here.
+
+  A controlled run is in progress on bf16: attention-only LoRA r=32 on
+  Magicoder-OSS-Instruct (decontaminated against HumanEval/MBPP), with
+  held-out loss for both arms and a downstream HumanEval/MBPP control run on
+  **the same stack**. That last point is deliberate: the original KD-LoRA
+  error was comparing an adapter against a *different* quantizer's numbers.
+- **Custom-engine streaming + true ternary — Gated DeltaNet is now
+  implemented, bit-exact, and this unblocks both.** Scoped first (this
+  model's `transformers` class is native, confirmed via `config.json`'s
+  `architectures: ["Qwen3_5MoeForConditionalGeneration"]`, internal codename
+  "Qwen3.5"; also revealed `mtp_num_hidden_layers: 1` — this model has a
+  multi-token-prediction head too), then actually built by a background
+  agent, working in an isolated worktree against a scratch venv:
+
+  - **`airllm_ternary/deltanet.py`** (new file) — a dependency-free PyTorch
+    port of `Qwen3_5MoeGatedDeltaNet`, matching the reference's parameter
+    names/shapes exactly (a reference state dict loads in unmodified):
+    `causal_conv1d_fn`/`causal_conv1d_update` (prefill/single-step short
+    conv), `recurrent_gated_delta_rule` (the decode-time form — fixed-size
+    per-layer state `[batch, num_v_heads, k_head_dim, v_head_dim]`, rides the
+    streaming loop's evict/reload cycle like a KV-cache entry),
+    `chunk_gated_delta_rule` (the parallel prefill form, ported in full, not
+    stubbed), `RMSNormGated`, and the full `GatedDeltaNet` module. All
+    recurrence math runs in float32 per `mamba_ssm_dtype`.
+  - **Verified bit-exact against the real `transformers` module** (identical
+    random weights/inputs, both forms, both with and without a cache,
+    prefill and single-token decode) — 0.0 max/mean absolute error on every
+    comparison, not just "close." The decode-path test specifically drives
+    the new module through `transformers.cache_utils.Cache` +
+    `LinearAttentionLayer` (the *real* cache classes, not a hand-written
+    one) across prefill-then-decode — a genuine cross-component check per
+    this project's own Part 1 methodology rule, not code validated against
+    itself.
+  - **Unexpected finding: `model.py`'s existing design already handles this
+    with zero changes.** It meta-instantiates the real `transformers` model
+    class wholesale and only swaps `nn.Linear`s / hooks layers — that's
+    architecture-agnostic by construction, so DeltaNet's own tensors stream
+    through the existing `build_shards`/`load_streaming_model` pipeline
+    unmodified once a synthetic hybrid model was built to test it end to end.
+  - **Bug 19, found by that same end-to-end test — a real, previously-unknown,
+    silent-failure bug.** This `transformers` version stores MoE experts as
+    fused 3D `nn.Parameter`s (`gate_up_proj`, `down_proj`) in the live
+    module, but they serialize to disk as per-expert 2D tensors whose names
+    collide with `policy.py`'s ternarizable-projection whitelist. `policy.py`
+    marks them for ternary quantization, but neither `_swap_linears` nor
+    `_materialize_dense` ever binds them back — **routed-expert weights
+    silently sit on the meta device for the entire run, no crash, no NaN**
+    (the shared-expert path masks it completely). Verified directly
+    (`gate_up_proj.is_meta == True` post-load), not inferred. This is exactly
+    the failure class Part 1 warns about — caught here only because the test
+    checked the loaded state against the reference, not because anything
+    visibly broke. **Would have silently produced a plausible-looking but
+    badly wrong model** (only the shared expert contributing, all 8 routed
+    experts per token missing) had this been run against a real checkpoint
+    without this check.
+
+  **Explicitly still needed before a real checkpoint can run end to end:**
+  (1) fix `policy.py`/`shard.py` for the fused MoE expert parameter layout —
+  blocks *correctness*, not just efficiency; (2) per-expert shard granularity
+  (unchanged from the existing MoE-pivot notes — a 256-expert layer still
+  ships every expert in one shard file); (3) GGUF→our-format conversion for
+  an actually-downloaded checkpoint (everything validated so far only
+  round-trips checkpoints this process itself wrote); (4) never tested
+  against a real multi-GB checkpoint or actual Jetson hardware, only
+  synthetic CPU-scale models. New files only: `airllm_ternary/deltanet.py`,
+  `tests/test_deltanet.py`, `tests/test_hybrid_streaming.py` — no existing
+  files modified, sitting on a worktree branch
+  (`worktree-agent-adb05baaf225a4441`), **uncommitted on that branch** (the
+  branch itself points at an old commit missing 137 files, so do not merge
+  it; copy the three new files onto `research-run-aug23` instead).
+
+  One naming check worth recording, since a stale note claimed otherwise: the
+  port's projection names (`in_proj_qkv`, `in_proj_z`, `in_proj_b`,
+  `in_proj_a`, `out_proj`) **do** match the installed
+  `transformers.models.qwen3_5_moe` exactly. Verified by reading both files
+  side by side, and independently corroborated by the live module dump from
+  the QLoRA probe on a real FP8 checkpoint.
+
+### Vocabulary trimming, evaluated — and the answer flips against it
+
+The earlier entry said "not yet trimmed-and-evaluated." It is now, and the
+result argues **against** trimming at the deployment precision.
+
+Kept-token sets were derived from *train* splits only (wikitext-2 train, GSM8K
+train, MBPP train, MMLU dev) and every number below is measured on *test*
+splits the derivation never saw. This split is the point: an earlier
+embedding-compression claim in this project was retracted precisely because the
+keep set was judged on the text it came from.
+
+**First framing — raw coverage.** Fraction of held-out tokens that survive:
+
+| held-out corpus | coverage @ 45,474 kept (18.3% of vocab) |
+|---|---|
+| wikitext/test | 99.27% |
+| gsm8k/test | 99.85% |
+| **humaneval** | **94.64%** |
+| mbpp/test | 97.43% |
+| mmlu_tech/test | 95.49% |
+
+**Second framing — token inflation, which is the correct one.** Treating a
+dropped token as unrepresentable is the wrong model of a real trim.
+`vm/vocab_trim.py` (written for Gemma earlier in this project) already pins all
+256 byte-fallback tokens precisely so that every string stays encodable; Qwen
+likewise has exactly 256 byte-level base tokens (confirmed, not assumed). With
+those pinned, nothing becomes unrepresentable — rarer strings just cost more
+tokens:
+
+| kept | %vocab | gsm8k | humaneval | mbpp | mmlu_tech | wikitext |
+|---|---|---|---|---|---|---|
+| 45,563 | 18.3% | +0.63% | **+20.83%** | +11.61% | **+20.98%** | +2.94% |
+| 38,003 | 15.3% | +1.17% | +24.64% | +15.10% | +28.36% | +5.46% |
+| 27,512 | 11.0% | +2.79% | **+33.56%** | +25.89% | **+44.62%** | +12.63% |
+
+Memory saved, untied embeddings (embed_tokens + lm_head), 1.016B params:
+
+| kept | params | bf16 | 4-bit |
+|---|---|---|---|
+| 45,563 | 0.187B (5.44×) | 1.89 → 0.35 GiB | 0.473 → 0.087 GiB |
+| 27,512 | 0.113B (9.02×) | 1.89 → 0.21 GiB | 0.473 → 0.052 GiB |
+
+**Why this is a bad trade at 4-bit.** The saving is 0.386 GiB — roughly 8% of
+the ~4.2–4.7 GB Jetson weight budget. The cost is ~21% more tokens on coding
+and technical Q&A, two of the three target use cases. Since this project's
+binding constraint is *GB read per generated token* (Part 6), 21% more tokens
+is 21% more I/O for the same answer. The trim spends the bottleneck resource to
+save the non-bottleneck one. It looks better if embeddings are kept at bf16
+(1.54 GiB saved), which is a defensible configuration — but that is a different
+deployment than the one this project is targeting.
+
+**And once again wikitext would have gotten it exactly backwards.** It reports
++2.94% inflation for a 5.44× smaller table — an obvious yes. The real target
+domains cost **7× more than that**. This is the third independent time in this
+project that wikitext has structurally failed to see the thing being measured
+(embedding rows, vocabulary coverage, now inflation).
+
+**Caveat, stated plainly:** the inflation numbers are an **upper bound**. They
+decompose a dropped token all the way to its bytes, whereas a real BPE
+re-encode would recover intermediate merges that are still in the kept set. The
+true cost lies somewhere below these figures. The *ranking* across domains is
+robust — it is driven by which tokens go missing, not by the decomposition
+depth — but do not quote the magnitudes as exact.
 
 ---
 
@@ -591,7 +725,51 @@ Thirteen. Note which produced *believable wrong numbers* rather than crashing.
     instead of failing loudly. Scored 0/10 on a sample where every single
     answer was actually correct. Fixed by dropping the trailing lookahead.
 
-**1–6, 12–16, 18 produced believable wrong results.** 7–11 and 17 crashed loudly.
+19. **Fused MoE expert parameters silently unbound, stuck on the meta
+    device.** Found while implementing Gated DeltaNet streaming support
+    (this section, above). `transformers`' fused 3D `nn.Parameter` MoE
+    experts (`gate_up_proj`, `down_proj`) serialize to disk as per-expert 2D
+    tensors whose names collide with `policy.py`'s ternarizable-projection
+    whitelist. `policy.py` marks them for quantization; nothing ever
+    actually binds them. Routed-expert weights would silently stay
+    meta-device placeholders for the whole run — no crash, no NaN, the
+    shared-expert path masks it entirely. Would have produced a
+    plausible-looking, badly-wrong model (effectively only the shared expert
+    contributing) had it reached a real checkpoint. Caught by checking
+    `.is_meta` on the loaded parameter against the reference, not by
+    anything visibly failing.
+
+20. **A quantization pipeline reported success having produced nothing.**
+    `gemma_pipeline.sh` ran `llama-imatrix -ngl 999` against a 61.4GB f16 GGUF
+    on a 44.4GB L40S. It OOM'd; `llama-quantize` then failed on the missing
+    imatrix; and the script printed "imatrix done", "quantize done" and
+    "STAGE 1 DONE" and touched its `PIPELINE_STAGE1_DONE` marker anyway,
+    because it ran under `set -ux` with **no `-e`**. Every downstream step
+    would have treated that marker as proof the artifacts existed. Same
+    family as bug 12: an instrument reporting a state it never checked. Fixed
+    by `set -eux -o pipefail` plus an explicit `need()` guard that stats each
+    artifact and aborts if it is missing or implausibly small — and by
+    quantizing to Q8_0 first so the imatrix pass fits in VRAM at all.
+21. **transformers cannot load an FP8 checkpoint whose config omits
+    `_experts_implementation`.** `quantizers/quantizer_finegrained_fp8.py:195`
+    does `FP8Experts._impl_tp_layer_overrides.get(impl)` — the table has only
+    the key `'deepgemm_megamoe'`, so a `None` impl yields `None`, and the next
+    line calls `.get` on it. Raises `AttributeError: 'NoneType' object has no
+    attribute 'get'` on any single-GPU load of Qwen3.6-35B-A3B-FP8. Worked
+    around in `fp8_compat.py` by making a table miss return `{}`, which turns
+    the enclosing comprehension into an identity map so the guarded
+    `setattr` is skipped — a genuine no-op, not a behaviour change. Tensor
+    parallelism is not in play on one GPU. Loud, not silent.
+22. **A vocabulary mask sized from the tokenizer instead of the model.**
+    `len(tok)` is 248,077 for Qwen3.6-35B-A3B but `lm_head` is 248,320 wide;
+    masking logits with the shorter mask raised
+    `The size of tensor a (248077) must match the size of tensor b (248320)`.
+    Crashed loudly, so it cost minutes — but had the mask been *longer* than
+    the logits rather than shorter, broadcasting could have silently masked
+    the wrong rows. Fixed by taking the width from the model config.
+
+**1–6, 12–16, 18–20 produced believable wrong results.** 7–11, 17, 21–22 crashed
+loudly.
 
 Bug 13 survived because **round-trip tests passed throughout** — pack/unpack was
 always exact. The fault lived in the relationship between quantizer and storage
