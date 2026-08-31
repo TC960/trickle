@@ -1,0 +1,53 @@
+{
+  "variant": "mincount5",
+  "fallback_mode": "greedy",
+  "kept": 27512,
+  "vocab": 248320,
+  "results": {
+    "gsm8k": {
+      "bpb_control": 0.28241875749142414,
+      "bpb_trimmed": 0.3237369941456124,
+      "bpb_delta_pct": 14.63013187268305,
+      "tokens_control": 16384,
+      "tokens_trimmed": 16519,
+      "token_inflation_pct": 0.823974609375,
+      "bytes": 47231.0
+    },
+    "humaneval": {
+      "bpb_control": 0.1440505907872049,
+      "bpb_trimmed": 0.5240644677717491,
+      "bpb_delta_pct": 263.8058441189666,
+      "tokens_control": 16384,
+      "tokens_trimmed": 18479,
+      "token_inflation_pct": 12.786865234375,
+      "bytes": 52704.0
+    },
+    "mbpp": {
+      "bpb_control": 0.37949099585525464,
+      "bpb_trimmed": 0.6549317280522441,
+      "bpb_delta_pct": 72.58162517828171,
+      "tokens_control": 16384,
+      "tokens_trimmed": 17791,
+      "token_inflation_pct": 8.587646484375,
+      "bytes": 55881.0
+    },
+    "mmlu_tech": {
+      "bpb_control": 0.3439858483314276,
+      "bpb_trimmed": 0.630816314292498,
+      "bpb_delta_pct": 83.38437972154932,
+      "tokens_control": 16384,
+      "tokens_trimmed": 17696,
+      "token_inflation_pct": 8.0078125,
+      "bytes": 60587.0
+    },
+    "wikitext": {
+      "bpb_control": 0.6880925993135051,
+      "bpb_trimmed": 0.7393453606098181,
+      "bpb_delta_pct": 7.448526745883743,
+      "tokens_control": 16384,
+      "tokens_trimmed": 16814,
+      "token_inflation_pct": 2.62451171875,
+      "bytes": 67540.0
+    }
+  }
+}

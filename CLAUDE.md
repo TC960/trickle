@@ -406,6 +406,18 @@ for further improvement. Status per technique:
   | Q8_0 | **85.3% ± 1.1** | 95.3% |
   | Q4_K_M | **85.1% ± 1.1** | 94.6% |
   | Q3_K_M | **83.2% ± 1.2** | 95.5% |
+  | Q2_K | **71.7% ± 1.4** | 94.1% (Q2_K_XL) |
+  | IQ1_M | not run | 93.0% |
+
+  The 2-bit row is where the architectures genuinely separate: Gemma gives up
+  **13.5 points** from 3-bit to 2-bit, Qwen gives up 1.4. Caveat on that row —
+  it is not perfectly matched, because Gemma ran plain `Q2_K` while Qwen's
+  number came from unsloth's `Q2_K_XL`, which spends extra bits on sensitive
+  tensors. Some of the 22-point gap is variant rather than architecture. The
+  IQ1_M row would have been the clean low-bit comparison (identical quant type
+  both sides) but the Gemma run was abandoned: the box was reclaimed mid-eval,
+  and with Gemma already 10+ points behind at every completed tier the row was
+  not worth re-provisioning for.
 
   Two corrections follow, and the second matters more than the first.
 
@@ -1073,6 +1085,46 @@ that doesn't pan out.
 | `tests/test_uniform.py` | **the gate**: trained weight == served weight |
 | `AUDIT.md` | evidence quality of every claim; bugs 1-13 (14-17 added this session, not yet ported into AUDIT.md) |
 | `reports/` | post-PTQ recovery survey (one conclusion withdrawn) |
+
+---
+
+# PART 7.5 — TECHNIQUE INVENTORY: DONE vs NEVER ATTEMPTED
+
+Written because the question "what have we actually done?" was hard to answer
+from this document, which buries status inside long prose entries. Anything not
+listed as done is not done.
+
+| technique | status |
+|---|---|
+| PTQ ladder, Qwen (Q8→IQ1_M) | **done** — 8-bit to ~1.6-bit costs only 2–4 GSM8K points |
+| PTQ ladder, Gemma, matched quantizer | **done** — 85.3 / 85.1 / 83.2 / 71.7 |
+| Expert pruning | **done, deliberately declined** — 96.5–100% of all 256 experts fire; even within one domain ~50% are needed for 90% coverage. Ceiling ~2×, not 5–10× |
+| MLP / channel pruning | **done (Gemma)** — ~25× worse per unit of compression than quantization |
+| Layer-depth + sensitivity mixed precision | **done (Gemma)** — worse than naive first-N; matched control never ran |
+| Vocabulary / token pruning | **done** — full held-out BPB analysis, see Part 3 |
+| Layer streaming | **done** — bit-exact at 31B, 3.16 GB resident; MoE measured under 8/4 GB budgets |
+| Gated DeltaNet port | **done** — bit-exact vs reference, committed |
+| **Activation pruning** | **never attempted** |
+| **QLoRA / QAT** | **attempted twice, never completed** — both instances reclaimed mid-training. The probe result stands (FP8 cannot backprop; peft reaches 0.047–0.094% of params, attention only) but no adapter was ever trained to completion and no downstream control/treatment number exists |
+| **SWE-bench / LiveCodeBench** | **never attempted** — no compatibility check done |
+| **Real agentic-browsing benchmark** | **never attempted** — WebArena/OSWorld/WorkArena need self-hosted infra. The 3/3 result is 3 hand-built mock HTML pages, a positive signal and not a score |
+| **GPQA** | **blocked** — gated HF dataset |
+
+**The honest gap.** Capability evidence for the three actual target uses is
+thin: coding rests on HumanEval/MBPP (single-function completion, 61.0% /
+62.6%), technical Q&A on a custom 6-subject MMLU proxy (~83%), and agentic
+browsing on a hand-rolled mock. GSM8K at 94–95% is the most-quoted number in
+this document and it is a *damage canary*, chosen because generative tasks
+show quantization damage first — it is near-saturated for a 2026 model and
+should not be read as evidence of reasoning strength. Differences inside its
+±0.7 stderr (e.g. Q3_K_M 95.5 vs Q8_0 95.3) are noise, not a finding.
+
+**Where the next effort belongs:** a real agentic-coding benchmark
+(SWE-bench / LiveCodeBench), not another compression technique. The
+architecture question is settled; the "is it good at my work" question is not.
+Deprioritise QLoRA specifically — the probe showed it can only reach ~0.09% of
+this model's parameters, because the 32.2B of routed experts are fused 3D
+tensors peft cannot target, so its upside was always small.
 
 ---
 
