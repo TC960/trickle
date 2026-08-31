@@ -6,6 +6,36 @@ currently on the table.
 
 ---
 
+# PART 0 — WHAT SUCCESS MEANS (read before choosing any experiment)
+
+**The deliverable is a model running on an 8 GB Jetson Orin Nano that can act
+as an automated job applier.** That is the product. Compression is a means to
+it, not the point.
+
+**A change is only a win if it holds up on these three axes:**
+
+1. **Agentic coding** — SWE-bench (or LiveCodeBench). Multi-step, repo-level,
+   test-verified. **Not** HumanEval/MBPP, which are single-function completion
+   and say nothing about whether the model can operate over a codebase.
+2. **Agentic browsing** — driving a real browser through a multi-step task
+   (the job-application flow). WebArena / OSWorld / WorkArena are the real
+   benchmarks here.
+3. **Technical reasoning / Q&A** — the "ask it things while learning" use.
+
+**GSM8K and MMLU are NOT on this list.** They are compression *damage canaries*
+— generative tasks show quantization damage first, which is why Part 1 ranks
+them the way it does. GSM8K is near-saturated for a 2026 model; 94-95% is not
+evidence of capability, and gaps inside its ±0.7 stderr are noise, not results.
+Never report a GSM8K number as though it answers "is this model good enough."
+
+**Current honest state against the three axes: none of them is properly
+measured.** Coding rests on HumanEval 61.0% / MBPP 62.6% (wrong granularity),
+browsing on three hand-written mock HTML pages (3/3, explicitly not a score),
+technical Q&A on a custom 6-subject MMLU proxy (~83%). Closing axis 1 is the
+highest-value work available; see Part 7.5.
+
+---
+
 # PART 1 — STANDING RULES
 
 ## Evaluation: do not lead with perplexity
@@ -1093,6 +1123,43 @@ that doesn't pan out.
 Written because the question "what have we actually done?" was hard to answer
 from this document, which buries status inside long prose entries. Anything not
 listed as done is not done.
+
+## "Effective size" — three numbers that keep getting conflated
+
+Asked directly, and worth writing down because the answer is not one number:
+
+| quantity | Qwen3.6-35B-A3B @ ~3-bit | meaning |
+|---|---|---|
+| total weights | ~15 GB | must all be *reachable*; routing is not predictable ahead of time |
+| **read per token** | **~0.8–1.0 GB** | only ~1.9B of 35B parameters are touched per token |
+| activations | tens of MB | the intermediate tensors are small; they are not the problem |
+
+The useful framing: a 35B model quantized to 15 GB behaves, per token, like a
+~1 GB model **in I/O terms** — that is precisely why MoE suits streaming and why
+the pivot happened. But it is a *different* ~1 GB each token, drawn
+unpredictably from the whole 15 GB, so you cannot simply hold 1 GB resident.
+On an 8 GB device you either fit all 15 GB (you cannot) or stream ~1 GB per
+token. Measured: **1.52 tok/s at a 4 GB budget** with plain page-cache
+eviction, no custom residency manager.
+
+So "activation cost" in the memory sense is near zero. The cost is I/O.
+
+## Expert pruning: the "no" is revisitable, and 2× is not nothing
+
+Recorded earlier as a considered no. Restating the tradeoff honestly, because
+2× on an 8 GB device is a real win and the original entry undersold that:
+
+- 15 GB → ~8 GB would matter a lot for this deployment.
+- The blocker is **domain specificity**, not the ratio. Top-20 expert overlap
+  between coding / math / MMLU is only **20–24%**. This deployment needs
+  coding *and* browsing *and* technical Q&A, so a single pruned model serving
+  all three keeps most experts and gets far less than 2×.
+- Secondary blocker: no tooling exists to remove experts from a GGUF and
+  repack it.
+
+**If per-domain models were acceptable** — a coding build, a browsing build —
+the 2× is available and this should be reopened. That is a product decision,
+not a measurement question, and the measurement above already supports it.
 
 | technique | status |
 |---|---|
