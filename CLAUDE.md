@@ -393,9 +393,37 @@ for further improvement. Status per technique:
   method than naive uniform quantization. The result mixes two variables
   (architecture *and* quantizer quality) and isolating "MoE is inherently
   more quantization-tolerant" from "this used a better quantizer" would need
-  the same method applied to both models — not done. Report the numbers as
-  measured; don't claim the clean architectural conclusion they'd suggest at
-  a glance.
+  the same method applied to both models.
+
+  **That confound has now been resolved, and it overturns the Gemma half of
+  this table.** Gemma 4 31B was put through the identical pipeline — llama.cpp
+  `convert_hf_to_gguf` → Q8_0 → `llama-imatrix` on the same wikitext+HumanEval+
+  MBPP calibration mix → `llama-quantize` — and evaluated with the identical
+  `gsm8k_fixed` task at n=1000, 5-shot:
+
+  | tier | Gemma 4 31B (dense) | Qwen3.6-35B-A3B (MoE) |
+  |---|---|---|
+  | Q8_0 | **85.3% ± 1.1** | 95.3% |
+  | Q4_K_M | **85.1% ± 1.1** | 94.6% |
+  | Q3_K_M | **83.2% ± 1.2** | 95.5% |
+
+  Two corrections follow, and the second matters more than the first.
+
+  1. **"4-bit costs Gemma 6 GSM8K points" was an artifact of our quantizer,
+     not of 4-bit.** Part 3's headline table records `w4g128` at 80.0 against
+     bf16 86.0. Under a calibrated imatrix quantizer the same model goes
+     85.3 → 85.1 from 8-bit to 4-bit — a **0.2 point** drop, inside noise.
+     `airllm_ternary/uniform.py` was destroying roughly five GSM8K points that
+     an imatrix-calibrated quantizer retains. Every low-bit Gemma number
+     produced by our own quantizer should be read as a statement about that
+     quantizer, not about the architecture or the bit-width.
+  2. **"Qwen tolerates quantization far better than Gemma" does not survive a
+     matched quantizer.** From 8-bit to 4-bit Gemma loses 0.2 points and Qwen
+     loses 0.7. The dramatic Gemma collapse was the confound, now measured.
+     What *does* survive is a persistent ~10-point capability gap at every
+     tier, and a divergence lower down: at 3-bit Gemma gives up 2.1 points
+     while Qwen gives up none. So the MoE pivot remains well supported on
+     capability — just not for the reason previously recorded.
 - **Ternary: not directly done, floor approximated instead** (see caveat
   above — IQ1_M is not literally our ternary code path). True ternary via
   our own quantizer needs our own inference engine to run the resulting
