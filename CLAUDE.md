@@ -1159,6 +1159,46 @@ Comparison point: Claude 4.5 Opus scores 76.8% on the same Bash-Only leaderboard
 A 22 GB model on a single L40S resolving 36% of real GitHub issues — verified by
 executing each repository's own test suite — is a genuinely usable result.
 
+## Q8_0 control: 4-bit costs nothing measurable on agentic coding
+
+The paired control, same 50 instances, same scaffold, same step_limit 100, only
+the quantization differs:
+
+| | Q4_K_M (22 GB) | Q8_0 (35 GB) |
+|---|---|---|
+| resolved | **18/50 (36%)** | **16/50 (32%)** |
+| produced a patch | 28 | 27 |
+| empty patch | 22 | 23 |
+| infra errors | 2 | 4 |
+
+Because the arms are paired, the marginal rates are the wrong test. McNemar on
+the discordant pairs:
+
+- resolved by **both**: 13
+- only Q4_K_M: 5 · only Q8_0: 3
+- 8 discordant pairs → **exact two-sided p = 0.73**
+
+**This is a null result and must be reported as one.** The 4-point gap is well
+inside the ±6.8 pp marginal standard error at n=50, and Part 1's own rule
+(differences under ~5% are not results) applies. **Do not claim 4-bit is
+better** because it scored higher — that direction is noise.
+
+**Why it matters anyway:** the deployment target is statistically
+indistinguishable from a model 60% larger on real multi-step agentic work.
+GSM8K already showed 4-bit costs Qwen ~0.7 points, but GSM8K is single-shot; the
+open worry was that small per-token damage would *compound* across ~100
+dependent agentic steps. On this evidence it does not.
+
+Caveats: n=50 only rules out large effects — a true 5-point gap could hide here
+— and both arms ran at step_limit 100, so both are floors.
+
+**One more believable-wrong-number on the way to this.** The first Q8 attempt
+scored **0/50**. Cause: `-c 32768 --parallel 4`. llama.cpp *divides* context
+across slots, so each agent got 8k instead of the Q4 run's 32k, every response
+was truncated mid-action (`finish_reason=length`), and every episode died with
+`RepeatedFormatError`. It looked exactly like "Q8 is catastrophically bad." It
+was a serving flag. Caught only by reading a trajectory.
+
 ## Harness bugs found getting here (the number was zero four times first)
 
 Every one of these produced a plausible, completely wrong result:
