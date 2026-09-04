@@ -1118,6 +1118,100 @@ that doesn't pan out.
 
 ---
 
+# PART 7.4 — SWE-BENCH VERIFIED: the first real agentic-coding number
+
+**Qwen3.6-35B-A3B @ Q4_K_M resolves 36% of SWE-bench Verified (18/50).**
+
+This is the first measurement against Part 0 axis 1. Everything before it —
+HumanEval 61.0%, MBPP 62.6% — was single-function completion and said nothing
+about operating over a real repository.
+
+Official harness report (`swebench eval verified`, run id `qwen_q4km_bashonly`):
+
+| | |
+|---|---|
+| submitted | 50 (fixed seed-0 subset of SWE-bench Verified) |
+| produced a patch | 28 |
+| empty patch (never submitted) | 22 |
+| completed (patch evaluated) | 26 |
+| infra errors | 2 |
+| **resolved (passed the repo's real tests)** | **18** |
+| unresolved | 8 |
+| **resolve rate** | **36%** (18/50) |
+
+**Of the patches it actually wrote, 64% were correct** (18/28). The model is not
+flailing when it commits to a fix; the dominant loss is the 22 instances where
+it never produced a patch at all.
+
+Setup: mini-swe-agent (bash-only, the scaffold behind SWE-bench's official
+"Bash Only" leaderboard, so this is comparable to published numbers), llama.cpp
+`llama-server` on one L40S, 4 workers.
+
+**Read it as a FLOOR, for three stated reasons:**
+1. **step_limit 100 vs the leaderboard's 250.** The 22 empty patches are mostly
+   this — the agent ran out of steps mid-task. Raising the cap should convert a
+   chunk of them.
+2. **Thinking disabled** (`--reasoning-budget 0`, see below). Reasoning models
+   generally do *better* on SWE-bench with thinking on.
+3. **4-bit**, the deployment target, not the model's best form.
+
+Comparison point: Claude 4.5 Opus scores 76.8% on the same Bash-Only leaderboard.
+A 22 GB model on a single L40S resolving 36% of real GitHub issues — verified by
+executing each repository's own test suite — is a genuinely usable result.
+
+## Harness bugs found getting here (the number was zero four times first)
+
+Every one of these produced a plausible, completely wrong result:
+
+- **PyPI `sweagent` is a dead 0.0.1 stub** whose dependency list contains
+  `togetherunidiff`, a nonexistent package (looks like `together` + `unidiff`
+  merged onto one line). Real SWE-agent is v1.1.0, git-only, needs Python ≥3.11,
+  and asserts on **three** repo-relative data dirs (`CONFIG_DIR`, `TOOLS_DIR`,
+  `TRAJECTORY_DIR`) that a pip install never creates. SWE-agent's own README
+  says to use mini-swe-agent instead; that advice is correct and saved the run.
+- **mini-swe-agent v2 defaults to NATIVE TOOL CALLING.** Its own
+  `swebench_backticks.yaml` sets backtick *prompts* but does not set
+  `model_class`, so without an explicit `--model-class litellm_textbased` you
+  get backtick prompts driving a tool-calling model — a silent mismatch that
+  scores ~0 for reasons unrelated to the model.
+- **Qwen3.6 is a reasoning model and llama.cpp splits its output.** With
+  `--jinja`, thinking goes to `message.reasoning_content` and the answer to
+  `message.content`. Under a small token budget the model spends everything
+  thinking and `content` comes back **empty** — so the agent sees blank replies,
+  issues no commands, and produces no patch. Fixed with `--reasoning-budget 0`.
+  This is the same failure family as bugs 14/15.
+- **mini-swe-agent auto-resumes by skipping instances already in `preds.json`.**
+  An empty entry left by a failed run made a rerun execute *zero* instances
+  while the go/no-go gate read the stale entry and declared failure. Third
+  instance of stale-state faking a result in one session (after
+  `PIPELINE_STAGE1_DONE` and `EVAL_DONE`). Use `--redo-existing` or wipe output.
+- **swebench v5 dropped the legacy evaluation path.**
+  `python -m swebench.harness.run_evaluation --dataset_name princeton-nlp/...`
+  now dies with `KeyError: 'image'`; v5 needs its own dataset build (which
+  carries the container image reference). Use the CLI: `swebench eval verified
+  -p preds.jsonl --run-id <id>`, and note it wants JSONL while mini-swe-agent
+  writes dict-keyed JSON.
+
+**And two bugs of my own, both in the checks meant to catch bugs:**
+- A `need()` guard that required `llama-server` to be ≥100 KB **false-failed a
+  perfectly good build** — modern llama.cpp builds it as an ~18 KB thin
+  executable against `libllama-server-impl.so`. A guard added to prevent false
+  successes caused a false failure.
+- `"$bin" --version | head -3 || die` **cannot detect a missing binary**,
+  because in a pipeline `||` binds to `head`, which succeeds regardless. Use
+  `[ -x "$bin" ]`. Same family as the `$?`-clobbering bug already in Part 5.
+
+**The meta-lesson, now demonstrated five times in one session:** a mature,
+widely-used eval harness is not trustworthy until verified against *your* model
+and *your* stack. The go/no-go gate that was supposed to catch this was itself
+mis-specified — it demanded a non-empty patch, but an instance that hits the
+step cap legitimately produces none, so it condemned a *working* setup. What
+actually resolved it was reading the raw trajectory and seeing the model emit
+textbook `THOUGHT:` + ```` ```mswea_bash_command ```` with commands returning
+`returncode 0`. Read the raw output; aggregate scores lie in both directions.
+
+---
+
 # PART 7.5 — TECHNIQUE INVENTORY: DONE vs NEVER ATTEMPTED
 
 Written because the question "what have we actually done?" was hard to answer
@@ -1173,7 +1267,7 @@ not a measurement question, and the measurement above already supports it.
 | Gated DeltaNet port | **done** — bit-exact vs reference, committed |
 | **Activation pruning** | **never attempted** |
 | **QLoRA / QAT** | **attempted twice, never completed** — both instances reclaimed mid-training. The probe result stands (FP8 cannot backprop; peft reaches 0.047–0.094% of params, attention only) but no adapter was ever trained to completion and no downstream control/treatment number exists |
-| **SWE-bench / LiveCodeBench** | **never attempted** — no compatibility check done |
+| **SWE-bench Verified** | **run** — 50-instance subset via mini-swe-agent, see below |
 | **Real agentic-browsing benchmark** | **never attempted** — WebArena/OSWorld/WorkArena need self-hosted infra. The 3/3 result is 3 hand-built mock HTML pages, a positive signal and not a score |
 | **GPQA** | **blocked** — gated HF dataset |
 
