@@ -1,0 +1,1044 @@
+{
+  "vocab_size": 248077,
+  "calibration_unique": 45441,
+  "variants": {
+    "mincount1": {
+      "kept": 45474,
+      "pct_vocab": 18.330598967256133,
+      "coverage": {
+        "gsm8k/test": {
+          "pct_token": 99.85272808392526,
+          "pct_type": 97.10167152277258,
+          "missing_types": 189,
+          "missing_token_instances": 373,
+          "top_missing": [
+            [
+              " sofas",
+              11
+            ],
+            [
+              " sapp",
+              10
+            ],
+            [
+              "-it",
+              9
+            ],
+            [
+              "logs",
+              9
+            ],
+            [
+              "ologna",
+              9
+            ],
+            [
+              " sudoku",
+              7
+            ],
+            [
+              "stalk",
+              7
+            ],
+            [
+              "plings",
+              7
+            ],
+            [
+              " Kyl",
+              6
+            ],
+            [
+              " Sof",
+              6
+            ],
+            [
+              " begon",
+              5
+            ],
+            [
+              " pokemon",
+              5
+            ],
+            [
+              " upload",
+              5
+            ],
+            [
+              " Dach",
+              5
+            ],
+            [
+              "-R",
+              4
+            ]
+          ]
+        },
+        "humaneval": {
+          "pct_token": 94.63567686121604,
+          "pct_type": 80.65529622980252,
+          "missing_types": 431,
+          "missing_token_instances": 1761,
+          "top_missing": [
+            [
+              " \"\"\"",
+              302
+            ],
+            [
+              " >>>",
+              182
+            ],
+            [
+              " \ufffd",
+              37
+            ],
+            [
+              "\ufffd",
+              37
+            ],
+            [
+              "\n\n\n",
+              29
+            ],
+            [
+              " ==>",
+              28
+            ],
+            [
+              "_prime",
+              26
+            ],
+            [
+              " Output",
+              20
+            ],
+            [
+              "_br",
+              18
+            ],
+            [
+              "_string",
+              17
+            ],
+            [
+              "                   ",
+              16
+            ],
+            [
+              "_grade",
+              16
+            ],
+            [
+              ".is",
+              15
+            ],
+            [
+              "[int",
+              13
+            ],
+            [
+              "Return",
+              13
+            ]
+          ]
+        },
+        "mbpp/test": {
+          "pct_token": 97.42602421341104,
+          "pct_type": 78.70828182941904,
+          "missing_types": 689,
+          "missing_token_instances": 2226,
+          "top_missing": [
+            [
+              " '*',",
+              83
+            ],
+            [
+              "_string",
+              51
+            ],
+            [
+              " '*",
+              25
+            ],
+            [
+              "*',",
+              24
+            ],
+            [
+              "_bit",
+              20
+            ],
+            [
+              "quares",
+              20
+            ],
+            [
+              " gcd",
+              16
+            ],
+            [
+              " parab",
+              15
+            ],
+            [
+              "_C",
+              14
+            ],
+            [
+              "_missing",
+              14
+            ],
+            [
+              " [],",
+              14
+            ],
+            [
+              "_with",
+              13
+            ],
+            [
+              "_place",
+              13
+            ],
+            [
+              "_lower",
+              12
+            ],
+            [
+              " tn",
+              12
+            ]
+          ]
+        },
+        "mmlu_tech/test": {
+          "pct_token": 95.49125321322141,
+          "pct_type": 83.23523827605848,
+          "missing_types": 883,
+          "missing_token_instances": 1982,
+          "top_missing": [
+            [
+              "|",
+              116
+            ],
+            [
+              "Statement",
+              50
+            ],
+            [
+              " bytes",
+              21
+            ],
+            [
+              "\ufffd",
+              21
+            ],
+            [
+              "mc",
+              16
+            ],
+            [
+              "Message",
+              15
+            ],
+            [
+              " SVM",
+              15
+            ],
+            [
+              " variance",
+              14
+            ],
+            [
+              " $\\",
+              14
+            ],
+            [
+              ")^",
+              13
+            ],
+            [
+              "sqrt",
+              13
+            ],
+            [
+              " \\|",
+              13
+            ],
+            [
+              " classifier",
+              13
+            ],
+            [
+              "Elect",
+              12
+            ],
+            [
+              " Gaussian",
+              12
+            ]
+          ]
+        },
+        "wikitext/test": {
+          "pct_token": 99.26848070882974,
+          "pct_type": 95.16120604065424,
+          "missing_types": 926,
+          "missing_token_instances": 2173,
+          "top_missing": [
+            [
+              " Bint",
+              169
+            ],
+            [
+              " UB",
+              113
+            ],
+            [
+              " UFC",
+              60
+            ],
+            [
+              " Gaz",
+              34
+            ],
+            [
+              "mitt",
+              30
+            ],
+            [
+              "yli",
+              29
+            ],
+            [
+              "ripp",
+              28
+            ],
+            [
+              " D\u00fc",
+              25
+            ],
+            [
+              "ossal",
+              24
+            ],
+            [
+              " Venta",
+              23
+            ],
+            [
+              " Tres",
+              20
+            ],
+            [
+              " Dio",
+              20
+            ],
+            [
+              " Akron",
+              19
+            ],
+            [
+              "ARD",
+              18
+            ],
+            [
+              " Perm",
+              16
+            ]
+          ]
+        }
+      }
+    },
+    "mincount2": {
+      "kept": 37905,
+      "pct_vocab": 15.279530145882125,
+      "coverage": {
+        "gsm8k/test": {
+          "pct_token": 99.73427882166673,
+          "pct_type": 95.10811225272198,
+          "missing_types": 319,
+          "missing_token_instances": 673,
+          "top_missing": [
+            [
+              " ske",
+              17
+            ],
+            [
+              " sofas",
+              11
+            ],
+            [
+              " sapp",
+              10
+            ],
+            [
+              "-it",
+              9
+            ],
+            [
+              " programmers",
+              9
+            ],
+            [
+              "logs",
+              9
+            ],
+            [
+              " almonds",
+              9
+            ],
+            [
+              "ologna",
+              9
+            ],
+            [
+              "nish",
+              9
+            ],
+            [
+              "gran",
+              8
+            ],
+            [
+              " sudoku",
+              7
+            ],
+            [
+              " slew",
+              7
+            ],
+            [
+              "stalk",
+              7
+            ],
+            [
+              "plings",
+              7
+            ],
+            [
+              " Kyl",
+              6
+            ]
+          ]
+        },
+        "humaneval": {
+          "pct_token": 93.58169855001827,
+          "pct_type": 75.8527827648115,
+          "missing_types": 538,
+          "missing_token_instances": 2107,
+          "top_missing": [
+            [
+              " \"\"\"",
+              302
+            ],
+            [
+              " >>>",
+              182
+            ],
+            [
+              " \ufffd",
+              37
+            ],
+            [
+              "\ufffd",
+              37
+            ],
+            [
+              " '''",
+              34
+            ],
+            [
+              "\n\n\n",
+              29
+            ],
+            [
+              " ==>",
+              28
+            ],
+            [
+              "_prime",
+              26
+            ],
+            [
+              "    \n",
+              25
+            ],
+            [
+              " Input",
+              24
+            ],
+            [
+              " Output",
+              20
+            ],
+            [
+              "_br",
+              18
+            ],
+            [
+              "_string",
+              17
+            ],
+            [
+              "                   ",
+              16
+            ],
+            [
+              " [\"",
+              16
+            ]
+          ]
+        },
+        "mbpp/test": {
+          "pct_token": 96.75998196135568,
+          "pct_type": 71.78615574783683,
+          "missing_types": 913,
+          "missing_token_instances": 2802,
+          "top_missing": [
+            [
+              " '*',",
+              83
+            ],
+            [
+              "_string",
+              51
+            ],
+            [
+              " '*",
+              25
+            ],
+            [
+              "*',",
+              24
+            ],
+            [
+              " ctr",
+              22
+            ],
+            [
+              "_bit",
+              20
+            ],
+            [
+              "quares",
+              20
+            ],
+            [
+              " gcd",
+              16
+            ],
+            [
+              " \",",
+              16
+            ],
+            [
+              " parab",
+              15
+            ],
+            [
+              "_C",
+              14
+            ],
+            [
+              "_missing",
+              14
+            ],
+            [
+              " [],",
+              14
+            ],
+            [
+              "_with",
+              13
+            ],
+            [
+              "_place",
+              13
+            ]
+          ]
+        },
+        "mmlu_tech/test": {
+          "pct_token": 94.094497145067,
+          "pct_type": 78.29884184545281,
+          "missing_types": 1143,
+          "missing_token_instances": 2596,
+          "top_missing": [
+            [
+              "|",
+              116
+            ],
+            [
+              "Statement",
+              50
+            ],
+            [
+              " bytes",
+              21
+            ],
+            [
+              "\ufffd",
+              21
+            ],
+            [
+              " oscillator",
+              21
+            ],
+            [
+              "Sup",
+              20
+            ],
+            [
+              "mc",
+              16
+            ],
+            [
+              "Message",
+              15
+            ],
+            [
+              " SVM",
+              15
+            ],
+            [
+              " variance",
+              14
+            ],
+            [
+              " $\\",
+              14
+            ],
+            [
+              "Consider",
+              13
+            ],
+            [
+              ")^",
+              13
+            ],
+            [
+              "sqrt",
+              13
+            ],
+            [
+              " \\|",
+              13
+            ]
+          ]
+        },
+        "wikitext/test": {
+          "pct_token": 98.71639067775784,
+          "pct_type": 91.78032084443748,
+          "missing_types": 1573,
+          "missing_token_instances": 3813,
+          "top_missing": [
+            [
+              " Bint",
+              169
+            ],
+            [
+              " tem",
+              128
+            ],
+            [
+              " UB",
+              113
+            ],
+            [
+              " Imag",
+              72
+            ],
+            [
+              " UFC",
+              60
+            ],
+            [
+              " Bacon",
+              56
+            ],
+            [
+              "mec",
+              55
+            ],
+            [
+              " Gaz",
+              34
+            ],
+            [
+              " Kirby",
+              31
+            ],
+            [
+              "mitt",
+              30
+            ],
+            [
+              "yli",
+              29
+            ],
+            [
+              "ripp",
+              28
+            ],
+            [
+              " impedance",
+              26
+            ],
+            [
+              " D\u00fc",
+              25
+            ],
+            [
+              " Boul",
+              24
+            ]
+          ]
+        }
+      }
+    },
+    "mincount5": {
+      "kept": 27393,
+      "pct_vocab": 11.042136110965547,
+      "coverage": {
+        "gsm8k/test": {
+          "pct_token": 99.41288649007198,
+          "pct_type": 89.54148136788837,
+          "missing_types": 682,
+          "missing_token_instances": 1487,
+          "top_missing": [
+            [
+              " Pokemon",
+              19
+            ],
+            [
+              " ske",
+              17
+            ],
+            [
+              " sofas",
+              11
+            ],
+            [
+              " peel",
+              10
+            ],
+            [
+              " dragons",
+              10
+            ],
+            [
+              " sapp",
+              10
+            ],
+            [
+              " zest",
+              10
+            ],
+            [
+              "-it",
+              9
+            ],
+            [
+              " cages",
+              9
+            ],
+            [
+              " programmers",
+              9
+            ],
+            [
+              " Juice",
+              9
+            ],
+            [
+              "logs",
+              9
+            ],
+            [
+              " almonds",
+              9
+            ],
+            [
+              "ologna",
+              9
+            ],
+            [
+              "nish",
+              9
+            ]
+          ]
+        },
+        "humaneval": {
+          "pct_token": 91.20567807968807,
+          "pct_type": 66.20287253141831,
+          "missing_types": 753,
+          "missing_token_instances": 2887,
+          "top_missing": [
+            [
+              " \"\"\"",
+              302
+            ],
+            [
+              " >>>",
+              182
+            ],
+            [
+              " ->",
+              55
+            ],
+            [
+              " =>",
+              55
+            ],
+            [
+              " Example",
+              39
+            ],
+            [
+              " \ufffd",
+              37
+            ],
+            [
+              "\ufffd",
+              37
+            ],
+            [
+              " '''",
+              34
+            ],
+            [
+              "\n\n\n",
+              29
+            ],
+            [
+              " ==>",
+              28
+            ],
+            [
+              "_prime",
+              26
+            ],
+            [
+              "    \n",
+              25
+            ],
+            [
+              " Input",
+              24
+            ],
+            [
+              "_pal",
+              21
+            ],
+            [
+              "indrome",
+              21
+            ]
+          ]
+        },
+        "mbpp/test": {
+          "pct_token": 94.69131948057955,
+          "pct_type": 58.220024721878865,
+          "missing_types": 1352,
+          "missing_token_instances": 4591,
+          "top_missing": [
+            [
+              " '*',",
+              83
+            ],
+            [
+              "_string",
+              51
+            ],
+            [
+              " '*",
+              25
+            ],
+            [
+              "*',",
+              24
+            ],
+            [
+              " ctr",
+              22
+            ],
+            [
+              "item",
+              21
+            ],
+            [
+              "igit",
+              20
+            ],
+            [
+              "_bit",
+              20
+            ],
+            [
+              "quares",
+              20
+            ],
+            [
+              "_set",
+              19
+            ],
+            [
+              " freq",
+              18
+            ],
+            [
+              "\"],",
+              17
+            ],
+            [
+              " gcd",
+              16
+            ],
+            [
+              " \",",
+              16
+            ],
+            [
+              "((\"",
+              16
+            ]
+          ]
+        },
+        "mmlu_tech/test": {
+          "pct_token": 91.08714938920357,
+          "pct_type": 69.07157774824378,
+          "missing_types": 1629,
+          "missing_token_instances": 3918,
+          "top_missing": [
+            [
+              "|",
+              116
+            ],
+            [
+              "Statement",
+              50
+            ],
+            [
+              " Statement",
+              50
+            ],
+            [
+              " |",
+              35
+            ],
+            [
+              " server",
+              25
+            ],
+            [
+              "What",
+              25
+            ],
+            [
+              "(k",
+              23
+            ],
+            [
+              " bytes",
+              21
+            ],
+            [
+              "\ufffd",
+              21
+            ],
+            [
+              " oscillator",
+              21
+            ],
+            [
+              "Sup",
+              20
+            ],
+            [
+              " regression",
+              19
+            ],
+            [
+              "pose",
+              18
+            ],
+            [
+              "\u03c0",
+              18
+            ],
+            [
+              " polynomial",
+              16
+            ]
+          ]
+        },
+        "wikitext/test": {
+          "pct_token": 97.36982962636297,
+          "pct_type": 82.35355593875738,
+          "missing_types": 3377,
+          "missing_token_instances": 7813,
+          "top_missing": [
+            [
+              " Bint",
+              169
+            ],
+            [
+              " tem",
+              128
+            ],
+            [
+              " UB",
+              113
+            ],
+            [
+              " Mendes",
+              106
+            ],
+            [
+              " Gore",
+              86
+            ],
+            [
+              " Imag",
+              72
+            ],
+            [
+              " UFC",
+              60
+            ],
+            [
+              " Bacon",
+              56
+            ],
+            [
+              "mec",
+              55
+            ],
+            [
+              "archs",
+              49
+            ],
+            [
+              " cem",
+              48
+            ],
+            [
+              " colossal",
+              45
+            ],
+            [
+              " CR",
+              42
+            ],
+            [
+              " Independ",
+              37
+            ],
+            [
+              "iente",
+              35
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

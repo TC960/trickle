@@ -28,8 +28,21 @@ _AIRLLM_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # --- local cache (must NOT be under ~/Desktop, see note 1) ------------------
 export AIRLLM_CACHE="${AIRLLM_CACHE:-$HOME/.cache/airllm-ternary}"
 export HF_HOME="$AIRLLM_CACHE/hf-cache"
-export AIRLLM_SHARDS="$AIRLLM_CACHE/shards-bitnet"
 mkdir -p "$AIRLLM_CACHE" "$HF_HOME"
+
+# Point at whichever shard directory actually holds a manifest, rather than
+# assuming a name. build_bitnet.py names them shards-<model>, but directories
+# built by hand or under an older scheme should still be found.
+export AIRLLM_SHARDS="$AIRLLM_CACHE/shards-bitnet-b1.58-2B-4T"
+if [ ! -f "$AIRLLM_SHARDS/manifest.json" ]; then
+    for _candidate in "$AIRLLM_CACHE"/shards-*; do
+        if [ -f "$_candidate/manifest.json" ]; then
+            AIRLLM_SHARDS="$_candidate"
+            break
+        fi
+    done
+fi
+unset _candidate
 
 # --- TLS trust store (see note 2) -------------------------------------------
 _CERT_BUNDLE="$AIRLLM_CACHE/certs/macos-trust.pem"

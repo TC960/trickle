@@ -1,0 +1,10 @@
+[Unit]
+Description=Shut the box down once the GPU has been idle for a while
+Documentation=https://github.com/TC960/trickle
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=IDLE_MB=2000
+Environment=NEEDED=3
+ExecStart=/bin/bash /ephemeral/work/idle_guard.sh

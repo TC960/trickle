@@ -1,0 +1,1 @@
+{"tag": "gemma-w4g128-saved", "model": "google/gemma-4-31B", "quant": "w4g128-sequential", "bits": 4, "group_size": 128, "steps": 200, "skip_first": 0, "skip_last": 0, "perplexity": 5.3410210609436035, "bits_per_byte": 0.54497, "eval_bytes": 1296370, "tokens_scored": 292282, "window": 2048, "stride": 1024, "eval_seconds": 266.9}

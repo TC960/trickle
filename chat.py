@@ -26,10 +26,32 @@ from airllm_ternary.shard import load_manifest
 
 DEFAULT_MODEL = "microsoft/bitnet-b1.58-2B-4T"
 
-# Resolved from the environment so the repo carries no machine-specific paths.
-# activate.sh exports AIRLLM_CACHE; the fallback keeps this runnable without it.
-_CACHE = Path(os.environ.get("AIRLLM_CACHE", Path.home() / ".cache/airllm-ternary"))
-DEFAULT_SHARDS = str(_CACHE / f"shards-{DEFAULT_MODEL.split('/')[-1]}")
+
+def _default_shards() -> str:
+    """Locate the shard directory without hardcoding any machine-specific path.
+
+    Checks, in order: an explicit AIRLLM_SHARDS override, the canonical name
+    derived from the model id, then any other shards-* directory that actually
+    contains a manifest. The last case covers directories built under an older
+    naming scheme.
+    """
+    explicit = os.environ.get("AIRLLM_SHARDS")
+    if explicit:
+        return explicit
+
+    cache = Path(os.environ.get("AIRLLM_CACHE", Path.home() / ".cache/airllm-ternary"))
+    canonical = cache / f"shards-{DEFAULT_MODEL.split('/')[-1]}"
+    if (canonical / "manifest.json").exists():
+        return str(canonical)
+
+    for candidate in sorted(cache.glob("shards-*")):
+        if (candidate / "manifest.json").exists():
+            return str(candidate)
+
+    return str(canonical)  # nothing built yet; report the canonical location
+
+
+DEFAULT_SHARDS = _default_shards()
 
 
 def peak_rss_gb() -> float:

@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the idle guard every 5 minutes
+Documentation=https://github.com/TC960/trickle
+
+[Timer]
+# Start checking a minute after boot, then every 5 minutes. With NEEDED=3 that
+# means shutdown after ~15 minutes of confirmed idleness.
+OnBootSec=1min
+OnUnitActiveSec=5min
+# Catch up after a suspend rather than silently skipping the missed window.
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

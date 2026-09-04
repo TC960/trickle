@@ -1,0 +1,105 @@
+{
+  "vocab": 248077,
+  "byte_tokens": 256,
+  "variants": {
+    "mincount1": {
+      "kept": 45474,
+      "kept_with_bytes": 45563,
+      "corpora": {
+        "gsm8k": {
+          "orig_tokens": 253273,
+          "trimmed_tokens": 254857,
+          "inflation_pct": 0.6254121047249317
+        },
+        "humaneval": {
+          "orig_tokens": 32828,
+          "trimmed_tokens": 39665,
+          "inflation_pct": 20.82673327647131
+        },
+        "mbpp": {
+          "orig_tokens": 38770,
+          "trimmed_tokens": 43271,
+          "inflation_pct": 11.609491875161204
+        },
+        "mmlu_tech": {
+          "orig_tokens": 42641,
+          "trimmed_tokens": 51588,
+          "inflation_pct": 20.98215332661053
+        },
+        "wikitext": {
+          "orig_tokens": 297053,
+          "trimmed_tokens": 305784,
+          "inflation_pct": 2.9392061349321486
+        }
+      },
+      "bf16_gib_full": 1.8926773071289062,
+      "bf16_gib_trim": 0.34761810302734375
+    },
+    "mincount2": {
+      "kept": 37905,
+      "kept_with_bytes": 38003,
+      "corpora": {
+        "gsm8k": {
+          "orig_tokens": 253273,
+          "trimmed_tokens": 256236,
+          "inflation_pct": 1.169883880239908
+        },
+        "humaneval": {
+          "orig_tokens": 32828,
+          "trimmed_tokens": 40917,
+          "inflation_pct": 24.64055074936031
+        },
+        "mbpp": {
+          "orig_tokens": 38770,
+          "trimmed_tokens": 44626,
+          "inflation_pct": 15.104462213051328
+        },
+        "mmlu_tech": {
+          "orig_tokens": 42641,
+          "trimmed_tokens": 54733,
+          "inflation_pct": 28.357683919232656
+        },
+        "wikitext": {
+          "orig_tokens": 297053,
+          "trimmed_tokens": 313283,
+          "inflation_pct": 5.463671466034681
+        }
+      },
+      "bf16_gib_full": 1.8926773071289062,
+      "bf16_gib_trim": 0.28993988037109375
+    },
+    "mincount5": {
+      "kept": 27393,
+      "kept_with_bytes": 27512,
+      "corpora": {
+        "gsm8k": {
+          "orig_tokens": 253273,
+          "trimmed_tokens": 260341,
+          "inflation_pct": 2.7906646188105233
+        },
+        "humaneval": {
+          "orig_tokens": 32828,
+          "trimmed_tokens": 43844,
+          "inflation_pct": 33.55671987327891
+        },
+        "mbpp": {
+          "orig_tokens": 38770,
+          "trimmed_tokens": 48806,
+          "inflation_pct": 25.885994325509422
+        },
+        "mmlu_tech": {
+          "orig_tokens": 42641,
+          "trimmed_tokens": 61667,
+          "inflation_pct": 44.61902863441289
+        },
+        "wikitext": {
+          "orig_tokens": 297053,
+          "trimmed_tokens": 334559,
+          "inflation_pct": 12.626029698403984
+        }
+      },
+      "bf16_gib_full": 1.8926773071289062,
+      "bf16_gib_trim": 0.20989990234375
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{"bits": 2, "group": 128, "layer": 30, "rtn": 0.1765444428545152, "gptq": 0.1062127457760513, "gain_pct": 39.837955781152544, "model": "google/gemma-4-31B"}
+{"bits": 2, "group": 64, "layer": 30, "rtn": 0.15294070193904108, "gptq": 0.09380664716179395, "gain_pct": 38.664694242620065, "model": "google/gemma-4-31B"}
+{"bits": 3, "group": 128, "layer": 30, "rtn": 0.07130277046512154, "gptq": 0.04256507942053606, "gain_pct": 40.303750972261035, "model": "google/gemma-4-31B"}
+{"bits": 3, "group": 64, "layer": 30, "rtn": 0.06349433146096456, "gptq": 0.03763799865444843, "gain_pct": 40.72226955001841, "model": "google/gemma-4-31B"}
+{"bits": 4, "group": 128, "layer": 30, "rtn": 0.03129433906746274, "gptq": 0.0198759961569488, "gain_pct": 36.486927830298185, "model": "google/gemma-4-31B"}
+{"bits": 4, "group": 64, "layer": 30, "rtn": 0.028050232078545793, "gptq": 0.017611977248743794, "gain_pct": 37.21272180769475, "model": "google/gemma-4-31B"}

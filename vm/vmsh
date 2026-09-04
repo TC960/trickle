@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Run a command on the Brev box. Usage: ./vm/vmsh "nvidia-smi"
+#   -n            : don't read stdin, so backgrounded remote jobs don't hang ssh
+#   known-hosts   : Brev's generated config points at /dev/null, which otherwise
+#                   prompts on every connection
+exec ssh -n \
+  -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null \
+  -o LogLevel=ERROR \
+  -o ConnectTimeout=20 \
+  "${BREV_HOST:-gorgeous-copper-mite}" "$@"
