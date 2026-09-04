@@ -130,7 +130,24 @@ Investigate each of these hypotheses **against my actual code and configs** (ask
 - **Gemma4-26B-A4B** = MoE with router + experts → **this is the pruning target**.
 - **Gemma4-E4B** = dense edge model using Per-Layer Embeddings, **no experts, no router, nothing to prune** → E4B is only relevant as a *distillation student* in the fallback plan, never as an expert-pruning target.
 
-**Core idea:** Build **2-3 separately pruned + quantized checkpoints, one per domain** (agentic/tool-calling, coding, technical-English). Swap the entire checkpoint at session or task-classification boundaries — **never per token**. This sidesteps the bandwidth wall entirely because a checkpoint swap happens once per session, not once per forward pass.
+**Core idea — read this carefully, it is the central architectural bet of the program:**
+
+The pruned MoE is **not** required to fit entirely in 8GB. The design is a **hot/cold expert split**:
+
+- **Hot experts** — the subset that covers the overwhelming majority of routing mass for a given domain — stay resident in the Orin Nano's 8GB.
+- **Cold experts** live remotely (network-attached host, or local NVMe) and are streamed in only when the router selects them.
+
+**This makes the problem a cache hit-rate problem, not a per-token bandwidth problem.** If routing profiling shows 90-95% of tokens route entirely within the resident hot set, the system only stalls on the tail. This is fundamentally different from the dense-model streaming case (where every parameter is touched every token and streaming is hopeless), and the distinction matters — do not conflate them.
+
+**Prior art to study and differentiate from:** PowerInfer does hot/cold splitting at the *neuron* level against SSD. This design applies the same principle at the *expert* level, with a network tier, on edge hardware, with domain-specialized hot sets. Verify whether this specific combination has been done; if it has, learn from it, and if it hasn't, that is a point in favor of the work being novel rather than a warning sign.
+
+**Critical measurements this design lives or dies on — get these early:**
+- **Hot-set hit rate per domain** at various resident-set sizes. This is THE number. Plot hit rate vs. resident memory.
+- **Cold-expert fetch latency** over the actual transport (network or NVMe). A stall is only acceptable if it's tens of ms, not seconds.
+- **Effective tok/s** accounting for stall frequency × stall cost.
+- Whether hot sets are **stable within a session** or churn (churn destroys the model).
+
+**Additionally**, build 2-3 separately pruned+quantized checkpoints, one per domain, swapped at session or task-classification boundaries — never per token. Hot-set composition will differ per domain; that's expected and is the point.
 
 **Pipeline:**
 
@@ -224,6 +241,39 @@ Flip rate is the % of individual questions where the compressed model's answer d
 2. A rebuilt harness: correct chat templating, adequate n, multi-seed, error bars, domain benchmarks primary and general benchmarks secondary.
 3. **Re-run of my previous comparison (bf16 / nf4 control / nf4+KD-LoRA / w4g128) on the corrected harness**, with a memory-footprint column added — the original table had no footprint column, which makes it impossible to judge whether my custom w4g128 scheme buys anything over off-the-shelf NF4. Note that w4g128 lost to the NF4 control on every metric in the original table; if that holds up on a valid harness, w4g128 should be dropped.
 4. A clear statement of which of my previous conclusions survive and which were noise.
+
+---
+
+## TRACK A.5 — HEAD-TO-HEAD AGAINST GOOGLE'S OFFICIAL QAT RELEASE
+
+**Do this immediately after Track 0, before any further custom compression work.** It may invalidate or redirect large parts of the program, and it is cheap.
+
+**Context:** Google released official QAT versions of Gemma 4 on approximately June 5, 2026, reportedly cutting memory ~72% while holding quality within a few points of FP16. I built my own QAT/KD/PTQ/LoRA pipeline without knowing this. I need to know whether I reinvented something Google already did better.
+
+**Tasks:**
+
+1. **Find and verify the official QAT release.** Locate Google's QAT checkpoints on Hugging Face / Kaggle for the Gemma 4 variants relevant to me. Confirm which variants have QAT versions, what format they ship in (note: some are LiteRT-LM mobile format rather than standard GGUF, which affects whether I can actually use them on Jetson), and their actual measured memory footprints. **Report what you can verify and flag what you cannot — do not assume the ~72% figure is accurate for my specific variant.**
+
+2. **Establish what Google evaluated on.** Find their published methodology: which benchmarks, what sample sizes, whether thinking mode was on, what the FP16 baseline was. If their eval set differs materially from mine, note that their "within a few points" claim may not transfer to agentic tool-calling and coding — which is exactly my domain and exactly where quantization damage tends to concentrate.
+
+3. **Run the head-to-head on MY Track 0 harness.** Same benchmarks, same sample sizes, same seeds, error bars on everything. Arms to compare:
+   - Google official QAT
+   - My nf4 control
+   - My nf4 + KD-LoRA
+   - My custom w4g128
+   - bf16 reference
+   
+   Add a **memory footprint column** and, where possible, a projected tok/s column. The absence of a footprint column made my original comparison uninterpretable.
+
+4. **Answer these questions explicitly:**
+   - Does Google's QAT beat my pipeline on *general* benchmarks? (Likely yes — they had more compute.)
+   - Does it beat my pipeline on *my three domains specifically*? (Not obvious — they optimized for general use, I can optimize narrowly. This is the whole thesis of the program.)
+   - Is the gap explained by technique, or by compute/data scale? Be specific about which.
+   - Should I abandon custom quantization and build on top of Google's QAT checkpoints instead?
+
+5. **If Google's QAT wins outright:** say so plainly and recommend adopting it as the base for all downstream work (pruning, KD, domain specialization) rather than continuing custom quantization. Building domain specialization on top of a strong official QAT base is a perfectly good outcome and is not a failure.
+
+**This comparison is a legitimate deliverable regardless of outcome.** A rigorous, well-evaluated "here is where my hand-rolled pipeline beat and lost to the vendor's official release, and here is why" is a real result. Write it up as such.
 
 ---
 
